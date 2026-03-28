@@ -53,14 +53,17 @@ export class ProjectService {
   async loadSnapshot(projectRoot: string, preflight: CodexPreflightResult): Promise<ProjectSnapshot> {
     const paths = getWorkspacePaths(path.resolve(projectRoot))
     const project = projectSchema.parse(await readJsonFile(paths.projectConfigFile, null))
-    const [agents, bugs, research, runs, messages, artifacts] = await Promise.all([
-      readJsonFile<AgentRecord[]>(paths.agentsFile, createInitialAgentRecords()),
-      readJsonFile<BugRecord[]>(paths.bugsFile, []),
+    const [storedAgents, storedBugs, research, storedRuns, messages, artifacts] = await Promise.all([
+      readJsonFile<Partial<AgentRecord>[]>(paths.agentsFile, createInitialAgentRecords()),
+      readJsonFile<Partial<BugRecord>[]>(paths.bugsFile, []),
       readJsonFile<ResearchSource[]>(paths.researchFile, []),
-      readJsonFile<RunSession[]>(paths.runsFile, []),
+      readJsonFile<Partial<RunSession>[]>(paths.runsFile, []),
       readJsonFile<AgentMessage[]>(paths.messagesFile, []),
       readJsonFile<ArtifactRecord[]>(paths.artifactsFile, []),
     ])
+    const agents = this.normalizeAgents(storedAgents)
+    const bugs = this.normalizeBugs(storedBugs)
+    const runs = this.normalizeRuns(storedRuns)
 
     return {
       project,
@@ -200,9 +203,57 @@ export class ProjectService {
         return [
           this.ensureMarkdown(path.join(basePath, 'notes.md'), `# ${folder}\n\n`),
           this.ensureMarkdown(path.join(basePath, 'decisions.md'), `# ${folder} decisions\n\n`),
+          this.ensureMarkdown(
+            path.join(basePath, 'status.md'),
+            `# ${folder} status\n\n## Current state\nAwaiting assignment.\n\n## Next actions\n- Read the brief.\n- Inspect current project state.\n- Persist decisions and evidence here.\n`,
+          ),
         ]
       }),
     )
+  }
+
+  private normalizeAgents(storedAgents: Partial<AgentRecord>[]): AgentRecord[] {
+    const defaults = createInitialAgentRecords()
+
+    return defaults.map((baseline) => {
+      const stored = storedAgents.find((entry) => entry.id === baseline.id)
+      return {
+        ...baseline,
+        ...stored,
+        activitySummary: stored?.activitySummary ?? baseline.activitySummary,
+        lastActivityAt: stored?.lastActivityAt ?? baseline.lastActivityAt,
+        resumeCount: stored?.resumeCount ?? baseline.resumeCount,
+      }
+    })
+  }
+
+  private normalizeRuns(storedRuns: Partial<RunSession>[]): RunSession[] {
+    return storedRuns
+      .filter((run): run is Partial<RunSession> & Pick<RunSession, 'id' | 'title' | 'phase' | 'status' | 'startedAt' | 'updatedAt' | 'agentIds' | 'summary' | 'blockers'> =>
+        Boolean(run.id && run.title && run.phase && run.status && run.startedAt && run.updatedAt && run.agentIds && run.summary && run.blockers),
+      )
+      .map((run) => ({
+        ...run,
+        lastAgentActivityAt: run.lastAgentActivityAt ?? null,
+        resumeCount: run.resumeCount ?? 0,
+      }))
+  }
+
+  private normalizeBugs(storedBugs: Partial<BugRecord>[]): BugRecord[] {
+    return storedBugs
+      .filter((bug): bug is Partial<BugRecord> & Pick<BugRecord, 'id' | 'title' | 'severity' | 'status' | 'discoveredBy' | 'createdAt' | 'updatedAt'> =>
+        Boolean(bug.id && bug.title && bug.severity && bug.status && bug.discoveredBy && bug.createdAt && bug.updatedAt),
+      )
+      .map((bug) => ({
+        ...bug,
+        triagedBy: bug.triagedBy ?? null,
+        assignedTo: bug.assignedTo ?? null,
+        reproduction: bug.reproduction ?? 'No reproduction steps recorded yet.',
+        evidencePaths: Array.isArray(bug.evidencePaths) ? bug.evidencePaths : [],
+        linkedRunId: bug.linkedRunId ?? null,
+        linkedTask: bug.linkedTask ?? null,
+        details: bug.details ?? 'No implementation details recorded yet.',
+      }))
   }
 
   private async ensureMarkdown(filePath: string, contents: string) {

@@ -93,12 +93,12 @@ export class CodexService {
 
   buildExecArgs(projectRoot: string, runtime: CodexRuntimeProfile, prompt: string): string[] {
     const args = [
+      '-a',
+      runtime.approvalPolicy,
       'exec',
       '--skip-git-repo-check',
       '-C',
       path.resolve(projectRoot),
-      '-a',
-      runtime.approvalPolicy,
       '-s',
       runtime.sandboxMode,
       '-m',
@@ -108,7 +108,7 @@ export class CodexService {
     ]
 
     if (runtime.enableSearch) {
-      args.push('--search')
+      args.unshift('--search')
     }
 
     args.push(prompt)

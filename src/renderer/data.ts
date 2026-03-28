@@ -66,6 +66,9 @@ export function createFallbackSeed(): AppSeed {
         queue: Math.max(0, 4 - index),
         focus: agent.mission,
         lastUpdate: 'Renderer fallback seed loaded.',
+        activitySummary: 'Fallback agent heartbeat is active.',
+        lastActivityAt: timestamp,
+        resumeCount: index > 2 ? 1 : 0,
         tempAgents: agent.id === 'strategy' ? ['browser-scout', 'release-auditor'] : [],
       })),
       bugs: [
@@ -106,6 +109,8 @@ export function createFallbackSeed(): AppSeed {
           status: 'running',
           startedAt: timestamp,
           updatedAt: timestamp,
+          lastAgentActivityAt: timestamp,
+          resumeCount: 1,
           agentIds: ['strategy', 'research', 'development-1', 'development-2', 'testing-1', 'testing-2', 'production'],
           summary: 'Strategy routed the work and the active agents are executing their first tasks.',
           blockers: ['Need real project attachment before live Codex execution.'],

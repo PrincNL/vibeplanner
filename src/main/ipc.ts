@@ -65,6 +65,7 @@ export function registerIpcHandlers(
       start: (input) => services.runService.startRun(input),
       pause: (input) => services.runService.pauseRun(input),
       resume: (input) => services.runService.resumeRun(input),
+      recover: (projectRoot) => services.runService.recoverRun(projectRoot),
       list: (projectRoot) => services.runService.listRuns(projectRoot),
     },
     bug: {
@@ -100,6 +101,7 @@ export function registerIpcHandlers(
   ipcMain.handle('run.start', (_, input) => api.run.start(input))
   ipcMain.handle('run.pause', (_, input) => api.run.pause(input))
   ipcMain.handle('run.resume', (_, input) => api.run.resume(input))
+  ipcMain.handle('run.recover', (_, projectRoot) => api.run.recover(projectRoot))
   ipcMain.handle('run.list', (_, projectRoot) => api.run.list(projectRoot))
   ipcMain.handle('bug.create', (_, input) => api.bug.create(input))
   ipcMain.handle('bug.update', (_, input) => api.bug.update(input))

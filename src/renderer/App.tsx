@@ -1,4 +1,4 @@
-import { startTransition, useDeferredValue, useEffect, useMemo, useState } from 'react'
+import { startTransition, useDeferredValue, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import type {
   AgentRecord,
   AgentRole,
@@ -12,6 +12,149 @@ import { tabs, createFallbackSeed } from './data'
 import type { TabId } from './types'
 
 const fallback = createFallbackSeed()
+type IconName =
+  | 'spark'
+  | 'compass'
+  | 'folder'
+  | 'grid'
+  | 'agents'
+  | 'bug'
+  | 'flask'
+  | 'play'
+  | 'settings'
+  | 'refresh'
+  | 'search'
+  | 'rocket'
+  | 'run'
+  | 'terminal'
+  | 'shield'
+  | 'brain'
+  | 'code'
+  | 'beaker'
+  | 'package'
+  | 'chevron'
+
+function iconPath(name: IconName) {
+  switch (name) {
+    case 'spark':
+      return 'M12 3l1.2 3.8L17 8l-3.8 1.2L12 13l-1.2-3.8L7 8l3.8-1.2L12 3zm6.5 9l.7 2.3 2.3.7-2.3.7-.7 2.3-.7-2.3-2.3-.7 2.3-.7.7-2.3zM6 14l1 3 3 1-3 1-1 3-1-3-3-1 3-1 1-3z'
+    case 'compass':
+      return 'M12 3a9 9 0 100 18 9 9 0 000-18zm3.8 5.2l-2 5.6-5.6 2 2-5.6 5.6-2z'
+    case 'folder':
+      return 'M3.5 7.5A2.5 2.5 0 016 5h3l1.5 2H18A2.5 2.5 0 0120.5 9.5v7A2.5 2.5 0 0118 19H6a2.5 2.5 0 01-2.5-2.5v-9z'
+    case 'grid':
+      return 'M4 4h6v6H4V4zm10 0h6v6h-6V4zM4 14h6v6H4v-6zm10 0h6v6h-6v-6z'
+    case 'agents':
+      return 'M9 11a3 3 0 100-6 3 3 0 000 6zm6 2a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM4 19a5 5 0 0110 0H4zm9.5 0a4 4 0 018 0h-8z'
+    case 'bug':
+      return 'M12 7a3 3 0 013 3v1.2a4.8 4.8 0 011.8 3.8V18a3 3 0 01-3 3h-1.6a3 3 0 01-3 0H7.6a3 3 0 01-3-3v-3a4.8 4.8 0 011.8-3.8V10a3 3 0 013-3h2zm-7.5 5H2m4 4H2m16-4h4m-4 4h4M8 5L6.5 3.5M16 5l1.5-1.5'
+    case 'flask':
+      return 'M10 3h4m-3 0v5.2L6 17a2.5 2.5 0 002.2 3.7h7.6A2.5 2.5 0 0018 17l-5-8.8V3m-3.5 8h5'
+    case 'play':
+      return 'M8 6.5v11l8.5-5.5L8 6.5z'
+    case 'settings':
+      return 'M12 8.5A3.5 3.5 0 1112 15.5 3.5 3.5 0 0112 8.5zm0-5l1.1 2.3 2.6.4-1.9 1.9.4 2.6-2.2-1.1-2.2 1.1.4-2.6-1.9-1.9 2.6-.4L12 3.5zm0 11l1.1 2.3 2.6.4-1.9 1.9.4 2.6-2.2-1.1-2.2 1.1.4-2.6-1.9-1.9 2.6-.4L12 14.5z'
+    case 'refresh':
+      return 'M20 6v5h-5M4 18v-5h5m10.2-2A7 7 0 007.6 6.6L5 9m14 6l-2.6 2.4A7 7 0 014.8 17.4'
+    case 'search':
+      return 'M10.5 4a6.5 6.5 0 014.9 10.8l4.4 4.4-1.4 1.4-4.4-4.4A6.5 6.5 0 1110.5 4z'
+    case 'rocket':
+      return 'M14 4c2.5.2 4.3 2 4.5 4.5L14 13l-3 1-1 3-4.5 4.5c-.2-2.5 0-5.8 2.6-8.4C10.7 4 13.9 3.8 14 4zm-6 8L4 13l1-4 3-1'
+    case 'run':
+      return 'M13 5a2 2 0 110 4 2 2 0 010-4zM9 20l1.5-5 2.5-2 2 1.5V20h-2v-3l-1.5-1-1 4H9zm1-9l2-2 2.5 1 .8 2.5-1.8.6-.5-1.4-1-.4-1.2 1.2L10 11z'
+    case 'terminal':
+      return 'M4 6l5 5-5 5m7 1h9'
+    case 'shield':
+      return 'M12 3l7 3v5c0 4.4-2.7 7.8-7 10-4.3-2.2-7-5.6-7-10V6l7-3z'
+    case 'brain':
+      return 'M9 4.5A3.5 3.5 0 0012 10V4a3.5 3.5 0 00-3 0zm3 5.5a3.5 3.5 0 003-5.5A3.5 3.5 0 0012 4v6zm-5 0a3 3 0 00-1 5.8V17a3 3 0 006 0v-1.2A3 3 0 0112 10H7zm10 0h-5a3 3 0 010 5.8V17a3 3 0 006 0v-1.2A3 3 0 0017 10z'
+    case 'code':
+      return 'M9 8l-4 4 4 4m6-8l4 4-4 4M13.5 5l-3 14'
+    case 'beaker':
+      return 'M9 3h6m-4 0v5l-5 8a3 3 0 002.6 4.5h7.8A3 3 0 0019 16l-5-8V3m-4 9h4'
+    case 'package':
+      return 'M12 3l7 4v10l-7 4-7-4V7l7-4zm0 0v8m7-4l-7 4-7-4'
+    case 'chevron':
+      return 'M9 6l6 6-6 6'
+  }
+}
+
+function Icon({ name, className = '' }: { name: IconName; className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d={iconPath(name)} />
+    </svg>
+  )
+}
+
+function getTabIcon(tabId: TabId): IconName {
+  switch (tabId) {
+    case 'onboarding':
+      return 'spark'
+    case 'project':
+      return 'folder'
+    case 'dashboard':
+      return 'grid'
+    case 'agents':
+      return 'agents'
+    case 'bugs':
+      return 'bug'
+    case 'research':
+      return 'search'
+    case 'runs':
+      return 'run'
+    case 'settings':
+      return 'settings'
+  }
+}
+
+function getSectionIcon(tabId: TabId): IconName {
+  switch (tabId) {
+    case 'onboarding':
+      return 'shield'
+    case 'project':
+      return 'folder'
+    case 'dashboard':
+      return 'spark'
+    case 'agents':
+      return 'brain'
+    case 'bugs':
+      return 'bug'
+    case 'research':
+      return 'compass'
+    case 'runs':
+      return 'rocket'
+    case 'settings':
+      return 'settings'
+  }
+}
+
+function getAgentIcon(role: AgentRole): IconName {
+  switch (role) {
+    case 'strategy':
+      return 'brain'
+    case 'research':
+      return 'compass'
+    case 'development-1':
+    case 'development-2':
+      return 'code'
+    case 'testing-1':
+    case 'testing-2':
+      return 'beaker'
+    case 'production':
+      return 'package'
+  }
+}
+
+function getStatusTone(status: SystemStatus | null, busy: boolean) {
+  if (busy) {
+    return 'Working'
+  }
+  if (status?.preflight.ok) {
+    return 'Clear lane'
+  }
+  return 'Needs setup'
+}
 
 function hasApi() {
   return typeof window !== 'undefined' && Boolean(window.vibeplanner)
@@ -19,6 +162,77 @@ function hasApi() {
 
 function formatDate(value: string) {
   return new Date(value).toLocaleString()
+}
+
+function formatRelativeTime(value: string | null) {
+  if (!value) {
+    return 'No heartbeat yet'
+  }
+
+  const delta = Date.now() - new Date(value).getTime()
+  if (Number.isNaN(delta) || delta < 0) {
+    return 'Just now'
+  }
+
+  const seconds = Math.floor(delta / 1000)
+  if (seconds < 10) {
+    return 'Just now'
+  }
+  if (seconds < 60) {
+    return `${seconds}s ago`
+  }
+
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) {
+    return `${minutes}m ago`
+  }
+
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) {
+    return `${hours}h ago`
+  }
+
+  const days = Math.floor(hours / 24)
+  return `${days}d ago`
+}
+
+function compactPath(value: string | null | undefined) {
+  if (!value) {
+    return 'Select a directory to begin.'
+  }
+
+  const withHomeAlias = value.replace(/^\/Users\/[^/]+/, '~')
+  if (withHomeAlias.length <= 24) {
+    return withHomeAlias
+  }
+
+  const segments = withHomeAlias.split('/').filter(Boolean)
+  if (segments.length <= 2) {
+    return withHomeAlias
+  }
+
+  if (segments.length === 3) {
+    return `${segments[0] === '~' ? '~/' : '/'}.../${segments.slice(-1).join('/')}`
+  }
+
+  return `${segments[0] === '~' ? '~/' : '/'}.../${segments.slice(-2).join('/')}`
+}
+
+function pathTailLabel(value: string | null | undefined) {
+  if (!value) {
+    return 'No folder selected'
+  }
+
+  const segments = value.split('/').filter(Boolean)
+  return segments.at(-1) ?? value
+}
+
+function isAgentLive(agent: AgentRecord) {
+  return agent.status === 'working' || agent.status === 'planning' || Boolean(agent.pid)
+}
+
+function findRecoverableRun(snapshot: ProjectSnapshot | null) {
+  return snapshot?.runs.find((run) => run.status === 'running' || run.status === 'queued' || run.status === 'paused') ?? null
 }
 
 function getTabTitle(tabId: TabId) {
@@ -63,6 +277,24 @@ function App() {
   const [agentLogs, setAgentLogs] = useState('No logs loaded.')
   const [smokeUrl, setSmokeUrl] = useState('https://example.com')
   const deferredLogs = useDeferredValue(agentLogs)
+  const recoveredRootsRef = useRef<Set<string>>(new Set())
+  const pollingRef = useRef(false)
+  const recoverableRun = useMemo(() => findRecoverableRun(snapshot), [snapshot])
+  const liveAgentCount = useMemo(
+    () => snapshot?.agents.filter((agent) => isAgentLive(agent)).length ?? 0,
+    [snapshot],
+  )
+  const hasLiveExecution = useMemo(
+    () => Boolean(snapshot?.runs.some((run) => run.status === 'running' || run.status === 'queued')
+      || snapshot?.agents.some((agent) => isAgentLive(agent))),
+    [snapshot],
+  )
+  const refreshProjectEvent = useEffectEvent(async (projectRoot?: string) => {
+    await refreshProject(projectRoot)
+  })
+  const loadLogsEvent = useEffectEvent(async (agentId = selectedAgentId, projectRoot = snapshot?.project.rootPath) => {
+    await loadLogs(agentId, projectRoot)
+  })
 
   const selectedAgent = useMemo(
     () => snapshot?.agents.find((agent) => agent.id === selectedAgentId) ?? null,
@@ -76,6 +308,7 @@ function App() {
     () => snapshot?.bugs.find((bug) => bug.id === selectedBugId) ?? snapshot?.bugs[0] ?? null,
     [selectedBugId, snapshot],
   )
+  const activeProjectRoot = snapshot?.project.rootPath ?? null
 
   useEffect(() => {
     void bootstrap()
@@ -102,6 +335,79 @@ function App() {
       setSelectedBugId(firstBug.id)
     }
   }, [selectedBugId, selectedRunId, snapshot])
+
+  useEffect(() => {
+    if (!activeProjectRoot || !hasApi() || activeTab !== 'agents') {
+      return
+    }
+
+    void loadLogsEvent(selectedAgentId, activeProjectRoot)
+  }, [activeProjectRoot, activeTab, selectedAgentId])
+
+  useEffect(() => {
+    if (!snapshot || !hasApi()) {
+      return
+    }
+
+    const recoverableRun = snapshot.runs.find((run) => run.status === 'running' || run.status === 'queued')
+    const projectRoot = snapshot.project.rootPath
+    if (!recoverableRun || recoveredRootsRef.current.has(projectRoot)) {
+      return
+    }
+
+    recoveredRootsRef.current.add(projectRoot)
+    let cancelled = false
+
+    void (async () => {
+      try {
+        const recovered = await window.vibeplanner!.run.recover(projectRoot)
+        if (recovered && !cancelled) {
+          await refreshProjectEvent(projectRoot)
+          setActiveTab('dashboard')
+        }
+      } catch (cause) {
+        if (!cancelled) {
+          setError(cause instanceof Error ? cause.message : 'Unable to recover the active run.')
+        }
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [snapshot])
+
+  useEffect(() => {
+    if (!snapshot || !hasApi() || busy || !hasLiveExecution) {
+      return
+    }
+
+    let cancelled = false
+    const interval = window.setInterval(() => {
+      if (cancelled || pollingRef.current) {
+        return
+      }
+
+      pollingRef.current = true
+      void (async () => {
+        try {
+          await refreshProjectEvent(snapshot.project.rootPath)
+          if (activeTab === 'agents') {
+            await loadLogsEvent(selectedAgentId, snapshot.project.rootPath)
+          }
+        } catch {
+          // Ignore transient polling errors; explicit actions still surface failures.
+        } finally {
+          pollingRef.current = false
+        }
+      })()
+    }, 2500)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(interval)
+    }
+  }, [activeTab, busy, hasLiveExecution, selectedAgentId, snapshot])
 
   async function bootstrap() {
     if (!hasApi()) {
@@ -177,7 +483,8 @@ function App() {
     await wrapTask(async () => {
       await window.vibeplanner!.run.start({ projectRoot: snapshot.project.rootPath })
       await refreshProject()
-      setActiveTab('runs')
+      await loadLogs(selectedAgentId)
+      setActiveTab('agents')
     })
   }
 
@@ -219,13 +526,13 @@ function App() {
     })
   }
 
-  async function loadLogs(agentId = selectedAgentId) {
-    if (!snapshot || !hasApi()) {
+  async function loadLogs(agentId = selectedAgentId, projectRoot = snapshot?.project.rootPath) {
+    if (!projectRoot || !hasApi()) {
       return
     }
 
     const logs = await window.vibeplanner!.agent.getLogs({
-      projectRoot: snapshot.project.rootPath,
+      projectRoot,
       agentId,
     })
     setAgentLogs(logs)
@@ -284,7 +591,9 @@ function App() {
     <div className={`app-shell ${isMac ? 'is-macos' : ''}`}>
       <aside className="nav-panel">
         <div className="brand-block">
-          <div className="brand-mark">VP</div>
+          <div className="brand-mark">
+            <Icon name="spark" className="brand-icon" />
+          </div>
           <div>
             <p className="eyebrow">Codex workspace</p>
             <h1>VibePlanner</h1>
@@ -292,9 +601,35 @@ function App() {
         </div>
 
         <div className="project-mini">
-          <span className="eyebrow">Current project</span>
-          <strong>{snapshot?.project.name ?? 'No project attached'}</strong>
-          <p>{snapshot?.project.rootPath ?? 'Select a directory to begin.'}</p>
+          <div className="mini-topline">
+            <span className="eyebrow">Current project</span>
+            <span className="mini-chip">
+              <Icon name="folder" className="inline-icon tiny-icon" />
+              {snapshot?.project.repoMode ?? 'idle'}
+            </span>
+          </div>
+          <div className="project-mini-main">
+            <div className="project-orb">
+              <Icon name="compass" className="panel-icon" />
+            </div>
+            <div>
+              <strong>{snapshot?.project.name ?? 'No project attached'}</strong>
+              <p className="project-location">{pathTailLabel(snapshot?.project.rootPath)}</p>
+              <p className="project-path" title={snapshot?.project.rootPath ?? 'Select a directory to begin.'}>
+                {compactPath(snapshot?.project.rootPath)}
+              </p>
+            </div>
+          </div>
+          <div className="project-mini-stats">
+            <span>
+              <Icon name="agents" className="inline-icon tiny-icon" />
+              {snapshot?.agents.length ?? 0} agents
+            </span>
+            <span>
+              <Icon name="bug" className="inline-icon tiny-icon" />
+              {snapshot?.bugs.length ?? 0} bugs
+            </span>
+          </div>
         </div>
 
         <nav className="tab-nav">
@@ -304,7 +639,11 @@ function App() {
               className={`tab-pill ${activeTab === tab.id ? 'is-active' : ''}`}
               onClick={() => switchTab(tab.id)}
             >
-              <span>{tab.label}</span>
+              <span className="tab-pill-label">
+                <Icon name={getTabIcon(tab.id)} className="nav-icon" />
+                {tab.label}
+              </span>
+              <small>{tab.hint}</small>
             </button>
           ))}
         </nav>
@@ -313,7 +652,7 @@ function App() {
           <div className={`status-badge ${status?.preflight.ok ? 'ok' : 'critical'}`}>
             {status?.preflight.ok ? 'Ready' : 'Needs attention'}
           </div>
-          <p>{busy ? 'Working…' : snapshot ? 'Workspace loaded' : 'Waiting for setup'}</p>
+          <p>{getStatusTone(status, busy)}</p>
         </div>
       </aside>
 
@@ -322,19 +661,35 @@ function App() {
           <div className="top-bar-copy">
             <p className="eyebrow">Workspace</p>
             <div className="top-bar-meta">
+              <div className="title-badge">
+                <Icon name={getSectionIcon(activeTab)} className="title-icon" />
+              </div>
               <h2>{getTabTitle(activeTab)}</h2>
               <div className={`status-badge ${status?.preflight.ok ? 'ok' : 'critical'}`}>
                 {status?.preflight.ok ? 'Ready' : 'Blocked'}
               </div>
             </div>
             <p className="top-summary">{getTabSummary(activeTab)}</p>
+            {snapshot ? (
+              <p className="live-summary">
+                {hasLiveExecution
+                  ? `${liveAgentCount} agents active · last run ${recoverableRun?.status ?? 'running'}`
+                  : 'No live execution in progress'}
+              </p>
+            ) : null}
           </div>
           <div className="top-actions">
             <button className="secondary" onClick={() => void refreshProject()} disabled={!snapshot || busy}>
+              <Icon name="refresh" className="inline-icon" />
               Refresh
             </button>
             <button className="primary" onClick={() => void handleStartRun()} disabled={!snapshot || busy}>
-              Start Core Run
+              <Icon name="rocket" className="inline-icon" />
+              {recoverableRun
+                ? recoverableRun.status === 'paused'
+                  ? 'Resume Core Run'
+                  : 'Recover Core Run'
+                : 'Start Core Run'}
             </button>
           </div>
         </header>
@@ -445,11 +800,31 @@ function OnboardingView({
 }) {
   return (
     <section className="stack">
+      <section className="hero-strip">
+        <div className="hero-strip-badge">
+          <Icon name="spark" className="section-icon" />
+        </div>
+        <div className="hero-strip-copy">
+          <p className="eyebrow">Ready check</p>
+          <h3>Make sure Codex is awake before the team starts moving.</h3>
+          <div className="hero-strip-tags">
+            <span>CLI</span>
+            <span>Auth</span>
+            <span>Browser lane</span>
+          </div>
+        </div>
+      </section>
+
       <section className="section-block">
         <div className="section-heading">
-          <div>
+          <div className="heading-with-icon">
+            <div className="section-icon-badge">
+              <Icon name="shield" className="section-icon" />
+            </div>
+            <div>
             <p className="eyebrow">Codex</p>
             <h3>Desktop readiness</h3>
+            </div>
           </div>
           <div className={`status-badge ${status?.preflight.ok ? 'ok' : 'critical'}`}>
             {status?.preflight.ok ? 'Ready' : 'Blocked'}
@@ -486,7 +861,10 @@ function OnboardingView({
           </div>
         </dl>
         <div className="button-row">
-          <button className="primary" onClick={onGoProject}>Go to Project Setup</button>
+          <button className="primary" onClick={onGoProject}>
+            <Icon name="chevron" className="inline-icon" />
+            Go to Project Setup
+          </button>
         </div>
       </section>
 
@@ -545,11 +923,31 @@ interface ProjectSetupViewProps {
 function ProjectSetupView(props: ProjectSetupViewProps) {
   return (
     <section className="stack">
+      <section className="hero-strip project-hero">
+        <div className="hero-strip-badge">
+          <Icon name="folder" className="section-icon" />
+        </div>
+        <div className="hero-strip-copy">
+          <p className="eyebrow">Workspace shape</p>
+          <h3>Point VibePlanner at the folder where the real work should happen.</h3>
+          <div className="hero-strip-tags">
+            <span>New repo</span>
+            <span>Existing repo</span>
+            <span>Markdown brief</span>
+          </div>
+        </div>
+      </section>
+
       <section className="section-block">
         <div className="section-heading">
-          <div>
+          <div className="heading-with-icon">
+            <div className="section-icon-badge">
+              <Icon name="folder" className="section-icon" />
+            </div>
+            <div>
             <p className="eyebrow">Project</p>
             <h3>Choose where Codex should work</h3>
+            </div>
           </div>
         </div>
         <p className="section-copy">
@@ -577,6 +975,7 @@ function ProjectSetupView(props: ProjectSetupViewProps) {
             <div className="inline-field">
               <input value={props.directoryInput} onChange={(event) => props.onDirectoryChange(event.target.value)} />
               <button className="secondary" onClick={() => void props.onPickDirectory()} disabled={props.busy}>
+                <Icon name="folder" className="inline-icon" />
                 Browse
               </button>
             </div>
@@ -587,6 +986,7 @@ function ProjectSetupView(props: ProjectSetupViewProps) {
             <div className="inline-field">
               <input value={props.briefInput} onChange={(event) => props.onBriefChange(event.target.value)} />
               <button className="secondary" onClick={() => void props.onPickBrief()} disabled={props.busy}>
+                <Icon name="search" className="inline-icon" />
                 Select
               </button>
             </div>
@@ -605,6 +1005,7 @@ function ProjectSetupView(props: ProjectSetupViewProps) {
 
         <div className="button-row">
           <button className="primary" onClick={props.onSubmit} disabled={props.busy || !props.directoryInput}>
+            <Icon name={props.mode === 'new' ? 'spark' : 'folder'} className="inline-icon" />
             {props.mode === 'new' ? 'Create Project' : 'Attach Repository'}
           </button>
         </div>
@@ -626,24 +1027,48 @@ function DashboardView({
 
   return (
     <section className="stack">
+      <section className="hero-strip dashboard-hero">
+        <div className="hero-strip-badge">
+          <Icon name="rocket" className="section-icon" />
+        </div>
+        <div className="hero-strip-copy">
+          <p className="eyebrow">Agent cockpit</p>
+          <h3>{status?.preflight.ok ? 'The lane is open. Keep the team moving.' : 'The lane still has blockers to clear.'}</h3>
+          <div className="hero-strip-tags">
+            <span>{snapshot.agents.length} core agents</span>
+            <span>{snapshot.runs.length} runs</span>
+            <span>{snapshot.bugs.length} tracked bugs</span>
+          </div>
+        </div>
+      </section>
+
       <section className="section-block">
         <div className="section-heading">
-          <h3>Overview</h3>
+          <div className="heading-with-icon">
+            <div className="section-icon-badge accent-grid">
+              <Icon name="grid" className="section-icon" />
+            </div>
+            <h3>Overview</h3>
+          </div>
         </div>
         <div className="inline-stats">
-          <div>
+          <div className="stat-card">
+            <Icon name="agents" className="stat-icon" />
             <span>Active agents</span>
             <strong>{snapshot.agents.filter((agent) => agent.status !== 'idle').length}</strong>
           </div>
-          <div>
+          <div className="stat-card">
+            <Icon name="bug" className="stat-icon" />
             <span>Bug queue</span>
             <strong>{snapshot.bugs.length}</strong>
           </div>
-          <div>
+          <div className="stat-card">
+            <Icon name="run" className="stat-icon" />
             <span>Runs</span>
             <strong>{snapshot.runs.length}</strong>
           </div>
-          <div>
+          <div className="stat-card">
+            <Icon name="shield" className="stat-icon" />
             <span>Preflight</span>
             <strong>{status?.preflight.ok ? 'Clear' : 'Blocked'}</strong>
           </div>
@@ -652,7 +1077,42 @@ function DashboardView({
 
       <section className="section-block">
         <div className="section-heading">
-          <h4>Recent coordination</h4>
+          <div className="heading-with-icon">
+            <div className="section-icon-badge accent-agents">
+              <Icon name="agents" className="section-icon" />
+            </div>
+            <h4>Live heartbeat</h4>
+          </div>
+        </div>
+        <div className="heartbeat-list">
+          {snapshot.agents.map((agent) => (
+            <div key={agent.id} className="heartbeat-row">
+              <div className="row-main">
+                <div className={`row-icon tone-${agent.status}`}>
+                  <Icon name={getAgentIcon(agent.id)} className="row-glyph" />
+                </div>
+                <div>
+                  <strong>{agent.name}</strong>
+                  <p>{agent.activitySummary}</p>
+                </div>
+              </div>
+              <div className="heartbeat-meta">
+                <div className={`status-badge ${agent.status}`}>{agent.status}</div>
+                <small>{formatRelativeTime(agent.lastActivityAt)}</small>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="section-block">
+        <div className="section-heading">
+          <div className="heading-with-icon">
+            <div className="section-icon-badge accent-spark">
+              <Icon name="spark" className="section-icon" />
+            </div>
+            <h4>Recent coordination</h4>
+          </div>
         </div>
         <div className="timeline">
           {snapshot.messages.slice(0, 6).map((message) => (
@@ -689,7 +1149,12 @@ function AgentsView({
     <section className="stack">
       <section className="section-block">
         <div className="section-heading">
-          <h3>Core agents</h3>
+          <div className="heading-with-icon">
+            <div className="section-icon-badge accent-agents">
+              <Icon name="agents" className="section-icon" />
+            </div>
+            <h3>Core agents</h3>
+          </div>
         </div>
         {snapshot.agents.map((agent) => (
           <button
@@ -697,9 +1162,27 @@ function AgentsView({
             className={`agent-row ${selectedAgentId === agent.id ? 'is-active' : ''}`}
             onClick={() => onSelectAgent(agent.id)}
           >
-            <div>
-              <strong>{agent.name}</strong>
-              <p>{agent.roleLabel}</p>
+            <div className="agent-row-main">
+              <div className="row-main">
+                <div className={`row-icon tone-${agent.status}`}>
+                  <Icon name={getAgentIcon(agent.id)} className="row-glyph" />
+                </div>
+                <div>
+                  <strong>{agent.name}</strong>
+                  <p>{agent.roleLabel}</p>
+                </div>
+              </div>
+              <div className="agent-row-copy">
+                <p>{agent.activitySummary}</p>
+                <div className="agent-row-meta">
+                  <span>{formatRelativeTime(agent.lastActivityAt)}</span>
+                  <span>{agent.progress}%</span>
+                  <span>{agent.resumeCount} resumes</span>
+                </div>
+                <div className="progress-track" aria-hidden="true">
+                  <span style={{ width: `${Math.max(4, agent.progress)}%` }} />
+                </div>
+              </div>
             </div>
             <div className={`status-badge ${agent.status}`}>{agent.status}</div>
           </button>
@@ -712,9 +1195,11 @@ function AgentsView({
           .map((agent) => (
             <div key={agent.id} className="button-row">
               <button className="primary" onClick={() => void onAgentAction(agent, 'start')}>
+                <Icon name="play" className="inline-icon" />
                 Launch Agent
               </button>
               <button className="secondary" onClick={() => void onAgentAction(agent, 'stop')}>
+                <Icon name="terminal" className="inline-icon" />
                 Stop Agent
               </button>
             </div>
@@ -723,7 +1208,12 @@ function AgentsView({
 
       <section className="section-block flush-block">
         <div className="section-heading">
-          <h4>Agent log stream</h4>
+          <div className="heading-with-icon">
+            <div className="section-icon-badge accent-terminal">
+              <Icon name="terminal" className="section-icon" />
+            </div>
+            <h4>Agent log stream</h4>
+          </div>
           <small>Latest stdout/stderr</small>
         </div>
         <pre className="terminal-output">{logs}</pre>
@@ -747,11 +1237,20 @@ function BugsView({
     return <EmptyState title="No bug queue" body="Attach a project to start collecting testing output." />
   }
 
+  if (snapshot.bugs.length === 0) {
+    return <EmptyState title="No bugs yet" body="Testing agents have not filed any bugs for this workspace yet." />
+  }
+
   return (
     <section className="stack">
       <section className="section-block">
         <div className="section-heading">
-          <h3>Bug queue</h3>
+          <div className="heading-with-icon">
+            <div className="section-icon-badge accent-bug">
+              <Icon name="bug" className="section-icon" />
+            </div>
+            <h3>Bug queue</h3>
+          </div>
         </div>
         {snapshot.bugs.map((bug) => (
           <button
@@ -759,9 +1258,14 @@ function BugsView({
             className={`bug-row ${selectedBugId === bug.id ? 'is-active' : ''}`}
             onClick={() => onSelectBug(bug.id)}
           >
-            <div>
+            <div className="row-main">
+              <div className={`row-icon tone-${bug.severity}`}>
+                <Icon name="bug" className="row-glyph" />
+              </div>
+              <div>
               <strong>{bug.title}</strong>
               <p>{bug.assignedTo ?? 'Unassigned'}</p>
+              </div>
             </div>
             <div className={`status-badge ${bug.severity}`}>{bug.severity}</div>
           </button>
@@ -776,14 +1280,16 @@ function BugsView({
               <h4>{bug.title}</h4>
               <div className={`status-badge ${bug.status}`}>{bug.status}</div>
             </div>
-            <p className="section-copy">{bug.details}</p>
+            <p className="section-copy">{bug.details || 'No implementation details recorded yet.'}</p>
             <div className="meta-grid">
               <span>Status: {bug.status}</span>
               <span>Discovered by: {bug.discoveredBy}</span>
               <span>Triaged by: {bug.triagedBy ?? 'Pending'}</span>
               <span>Assigned to: {bug.assignedTo ?? 'Pending'}</span>
             </div>
+            <p className="section-copy">{bug.reproduction || 'No reproduction steps recorded yet.'}</p>
             <button className="primary" onClick={() => void onAdvance(bug)} disabled={bug.status === 'fixed'}>
+              <Icon name="chevron" className="inline-icon" />
               Advance Status
             </button>
           </section>
@@ -802,11 +1308,17 @@ function ResearchView({ snapshot }: { snapshot: ProjectSnapshot | null }) {
       {snapshot.research.map((source) => (
         <section key={source.id} className="section-block">
           <div className="section-heading">
-            <div>
+            <div className="heading-with-icon">
+              <div className="section-icon-badge accent-research">
+                <Icon name="compass" className="section-icon" />
+              </div>
+              <div>
               <p className="eyebrow">{source.kind}</p>
               <h4>{source.title}</h4>
+              </div>
             </div>
             <a href={source.url} target="_blank" rel="noreferrer">
+              <Icon name="chevron" className="inline-icon" />
               Open source
             </a>
           </div>
@@ -839,7 +1351,12 @@ function RunsView({
     <section className="stack">
       <section className="section-block">
         <div className="section-heading">
-          <h3>Runs</h3>
+          <div className="heading-with-icon">
+            <div className="section-icon-badge accent-run">
+              <Icon name="rocket" className="section-icon" />
+            </div>
+            <h3>Runs</h3>
+          </div>
         </div>
         {snapshot.runs.map((run) => (
           <button
@@ -847,9 +1364,14 @@ function RunsView({
             className={`run-row ${selectedRunId === run.id ? 'is-active' : ''}`}
             onClick={() => onSelectRun(run.id)}
           >
-            <div>
+            <div className="row-main">
+              <div className={`row-icon tone-${run.status}`}>
+                <Icon name="run" className="row-glyph" />
+              </div>
+              <div>
               <strong>{run.title}</strong>
               <p>{run.phase}</p>
+              </div>
             </div>
             <div className={`status-badge ${run.status}`}>{run.status}</div>
           </button>
@@ -872,11 +1394,13 @@ function RunsView({
             <div className="button-row">
               {run.status === 'running' ? (
                 <button className="secondary" onClick={() => void onMutateRun(run, 'pause')}>
+                  <Icon name="terminal" className="inline-icon" />
                   Pause Run
                 </button>
               ) : null}
               {run.status === 'paused' ? (
                 <button className="primary" onClick={() => void onMutateRun(run, 'resume')}>
+                  <Icon name="rocket" className="inline-icon" />
                   Resume Run
                 </button>
               ) : null}
@@ -906,9 +1430,14 @@ function SettingsView({
     <section className="stack">
       <section className="section-block">
         <div className="section-heading">
-          <div>
+          <div className="heading-with-icon">
+            <div className="section-icon-badge accent-settings">
+              <Icon name="settings" className="section-icon" />
+            </div>
+            <div>
             <p className="eyebrow">Codex runtime</p>
             <h4>{snapshot.project.codexRuntime.model} / {snapshot.project.codexRuntime.reasoningEffort}</h4>
+            </div>
           </div>
         </div>
         <ul className="plain-list">
@@ -921,14 +1450,20 @@ function SettingsView({
 
       <section className="section-block">
         <div className="section-heading">
-          <div>
+          <div className="heading-with-icon">
+            <div className="section-icon-badge accent-play">
+              <Icon name="flask" className="section-icon" />
+            </div>
+            <div>
             <p className="eyebrow">Browser smoke check</p>
             <h4>Playwright target</h4>
+            </div>
           </div>
         </div>
         <div className="inline-field">
           <input value={smokeUrl} onChange={(event) => onSmokeUrlChange(event.target.value)} />
           <button className="primary" onClick={onSmokeRun}>
+            <Icon name="play" className="inline-icon" />
             Run Playwright
           </button>
         </div>
@@ -972,8 +1507,12 @@ function InspectorView({
               <li>Status: {selectedAgent.status}</li>
               <li>Queue: {selectedAgent.queue}</li>
               <li>Progress: {selectedAgent.progress}%</li>
+              <li>Last heartbeat: {formatRelativeTime(selectedAgent.lastActivityAt)}</li>
+              <li>Resume count: {selectedAgent.resumeCount}</li>
               <li>PID: {selectedAgent.pid ?? 'inactive'}</li>
             </ul>
+            <p className="inspector-summary">{selectedAgent.activitySummary}</p>
+            <p className="inspector-summary muted">{selectedAgent.lastUpdate}</p>
           </>
         ) : null}
         {activeTab === 'runs' && selectedRun ? (
@@ -981,6 +1520,9 @@ function InspectorView({
             <h4>{selectedRun.title}</h4>
             <p>{selectedRun.summary}</p>
             <ul className="plain-list">
+              <li>Updated: {formatDate(selectedRun.updatedAt)}</li>
+              <li>Last agent activity: {formatRelativeTime(selectedRun.lastAgentActivityAt)}</li>
+              <li>Resume count: {selectedRun.resumeCount}</li>
               {selectedRun.blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}
               {selectedRun.blockers.length === 0 ? <li>No blockers recorded.</li> : null}
             </ul>
@@ -989,9 +1531,11 @@ function InspectorView({
         {activeTab === 'bugs' && selectedBug ? (
           <>
             <h4>{selectedBug.title}</h4>
-            <p>{selectedBug.reproduction}</p>
+            <p>{selectedBug.reproduction || 'No reproduction steps recorded yet.'}</p>
             <ul className="plain-list">
-              {selectedBug.evidencePaths.map((path) => <li key={path}>{path}</li>)}
+              {(selectedBug.evidencePaths ?? []).length > 0
+                ? (selectedBug.evidencePaths ?? []).map((path) => <li key={path}>{path}</li>)
+                : <li>No evidence attached yet.</li>}
             </ul>
           </>
         ) : null}
@@ -1015,7 +1559,12 @@ function InspectorView({
 
       <section className="section-block flush-block">
         <div className="section-heading">
-          <h4>Recent output</h4>
+          <div className="heading-with-icon">
+            <div className="section-icon-badge accent-terminal">
+              <Icon name="terminal" className="section-icon" />
+            </div>
+            <h4>Recent output</h4>
+          </div>
           <small>Inspector tail</small>
         </div>
         <pre className="terminal-output compact">{logs}</pre>
@@ -1026,7 +1575,10 @@ function InspectorView({
 
 function EmptyState({ title, body }: { title: string; body: string }) {
   return (
-    <section className="section-block">
+    <section className="section-block empty-state">
+      <div className="empty-badge">
+        <Icon name="spark" className="section-icon" />
+      </div>
       <h4>{title}</h4>
       <p>{body}</p>
     </section>

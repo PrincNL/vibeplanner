@@ -18,6 +18,8 @@ import { ProjectService } from './project-service'
 import { CodexService } from './codex-service'
 import { AgentOrchestrator } from './agent-orchestrator'
 
+const RECOVERABLE_RUN_STATUSES = new Set<RunSession['status']>(['queued', 'running', 'paused'])
+
 export class RunService {
   constructor(
     private readonly projectService: ProjectService,
@@ -31,6 +33,11 @@ export class RunService {
       throw new Error(snapshot.preflight.guidance[0] ?? 'Codex preflight failed.')
     }
 
+    const recoverableRun = this.findRecoverableRun(snapshot.runs)
+    if (recoverableRun) {
+      return this.recoverPersistedRun(snapshot, recoverableRun, 'Continuing the latest incomplete run.')
+    }
+
     const startedAt = new Date().toISOString()
     const run: RunSession = {
       id: crypto.randomUUID(),
@@ -39,34 +46,27 @@ export class RunService {
       status: 'running',
       startedAt,
       updatedAt: startedAt,
+      lastAgentActivityAt: startedAt,
+      resumeCount: 0,
       agentIds: snapshot.agents.map((agent) => agent.id),
       summary: 'Codex agents launched from VibePlanner.',
       blockers: [],
     }
 
+    const seededAgents = createInitialAgentRecords().map((agent): AgentRecord => ({
+      ...agent,
+      status: agent.id === 'strategy' ? 'planning' : 'working',
+      queue: 1,
+      progress: agent.id === 'strategy' ? 15 : 5,
+      focus: 'Executing initial assignment from project brief.',
+      lastUpdate: `Queued for run ${run.id}.`,
+      activitySummary: 'Preparing initial workspace scan.',
+      lastActivityAt: startedAt,
+    }))
+
     await this.projectService.saveRuns(input.projectRoot, [run, ...snapshot.runs])
-    await this.projectService.saveAgents(
-      input.projectRoot,
-      createInitialAgentRecords().map((agent): AgentRecord => ({
-        ...agent,
-        status: agent.id === 'strategy' ? 'planning' : 'working',
-        queue: 1,
-        progress: agent.id === 'strategy' ? 15 : 5,
-        focus: 'Executing initial assignment from project brief.',
-        lastUpdate: `Queued for run ${run.id}.`,
-      })),
-    )
-
-    await Promise.allSettled(
-      snapshot.agents.map((agent) =>
-        this.orchestrator.startAgent({
-          projectRoot: input.projectRoot,
-          agentId: agent.id,
-          runId: run.id,
-        }),
-      ),
-    )
-
+    await this.projectService.saveAgents(input.projectRoot, seededAgents)
+    await this.launchAgentsForRun(input.projectRoot, run.id, seededAgents)
     return run
   }
 
@@ -75,19 +75,23 @@ export class RunService {
   }
 
   async resumeRun(input: RunMutationInput): Promise<RunSession> {
-    const run = await this.updateRun(input, 'running')
     const snapshot = await this.requireSnapshot(input.projectRoot)
-    await Promise.allSettled(
-      snapshot.agents.map((agent) =>
-        this.orchestrator.startAgent({
-          projectRoot: input.projectRoot,
-          agentId: agent.id,
-          runId: input.runId,
-        }),
-      ),
-    )
+    const run = snapshot.runs.find((entry) => entry.id === input.runId)
+    if (!run) {
+      throw new Error(`Run not found: ${input.runId}`)
+    }
 
-    return run
+    return this.recoverPersistedRun(snapshot, run, 'Resuming the selected run from saved checkpoints.')
+  }
+
+  async recoverRun(projectRoot: string): Promise<RunSession | null> {
+    const snapshot = await this.requireSnapshot(projectRoot)
+    const run = this.findRecoverableRun(snapshot.runs)
+    if (!run) {
+      return null
+    }
+
+    return this.recoverPersistedRun(snapshot, run, 'Recovered after reopening VibePlanner.')
   }
 
   async listRuns(projectRoot: string): Promise<RunSession[]> {
@@ -168,6 +172,46 @@ export class RunService {
     }
   }
 
+  private async recoverPersistedRun(
+    snapshot: ProjectSnapshot,
+    run: RunSession,
+    reason: string,
+  ): Promise<RunSession> {
+    const now = new Date().toISOString()
+    const nextRun: RunSession = {
+      ...run,
+      status: 'running',
+      updatedAt: now,
+      lastAgentActivityAt: run.lastAgentActivityAt ?? now,
+      resumeCount: run.resumeCount + 1,
+      summary: reason,
+    }
+
+    const nextRuns = snapshot.runs.map((entry) => (entry.id === run.id ? nextRun : entry))
+    const nextAgents: AgentRecord[] = snapshot.agents.map((agent): AgentRecord => {
+      if (!this.shouldResumeAgent(agent)) {
+        return agent
+      }
+
+      return {
+        ...agent,
+        status: (agent.id === 'strategy' ? 'planning' : 'working') satisfies AgentRecord['status'],
+        queue: Math.max(agent.queue, 1),
+        progress: Math.max(agent.progress, 15),
+        lastUpdate: `Recovered for run ${run.id}.`,
+        activitySummary: 'Reloading persisted checkpoint and continuing work.',
+        lastActivityAt: now,
+        pid: null,
+        sessionId: null,
+      }
+    })
+
+    await this.projectService.saveRuns(snapshot.project.rootPath, nextRuns)
+    await this.projectService.saveAgents(snapshot.project.rootPath, nextAgents)
+    await this.launchAgentsForRun(snapshot.project.rootPath, run.id, nextAgents)
+    return nextRun
+  }
+
   private async updateRun(input: RunMutationInput, nextStatus: 'running' | 'paused'): Promise<RunSession> {
     const snapshot = await this.requireSnapshot(input.projectRoot)
     const run = snapshot.runs.find((entry) => entry.id === input.runId)
@@ -179,14 +223,58 @@ export class RunService {
       this.orchestrator.stopRunAgents(input.projectRoot, run.agentIds)
     }
 
+    const timestamp = new Date().toISOString()
     const nextRun: RunSession = {
       ...run,
       status: transitionRunStatus(run.status, nextStatus),
-      updatedAt: new Date().toISOString(),
+      updatedAt: timestamp,
+      lastAgentActivityAt: nextStatus === 'paused' ? run.lastAgentActivityAt : timestamp,
     }
     const nextRuns = snapshot.runs.map((entry) => (entry.id === input.runId ? nextRun : entry))
     await this.projectService.saveRuns(input.projectRoot, nextRuns)
+
+    if (nextStatus === 'paused') {
+      const nextAgents: AgentRecord[] = snapshot.agents.map((agent): AgentRecord =>
+        run.agentIds.includes(agent.id)
+          ? {
+              ...agent,
+              status: (agent.status === 'reviewing' ? agent.status : 'idle') satisfies AgentRecord['status'],
+              queue: 0,
+              pid: null,
+              sessionId: null,
+              lastUpdate: 'Run paused. Saved checkpoint can be resumed later.',
+              activitySummary: 'Paused with persisted checkpoint.',
+              lastActivityAt: timestamp,
+            }
+          : agent,
+      )
+      await this.projectService.saveAgents(input.projectRoot, nextAgents)
+    }
+
     return nextRun
+  }
+
+  private async launchAgentsForRun(projectRoot: string, runId: string, agents: AgentRecord[]) {
+    await Promise.allSettled(
+      agents
+        .filter((agent) => this.shouldResumeAgent(agent))
+        .filter((agent) => !this.orchestrator.hasActiveSession(projectRoot, agent.id))
+        .map((agent) =>
+          this.orchestrator.startAgent({
+            projectRoot,
+            agentId: agent.id,
+            runId,
+          }),
+        ),
+    )
+  }
+
+  private findRecoverableRun(runs: RunSession[]): RunSession | null {
+    return runs.find((run) => RECOVERABLE_RUN_STATUSES.has(run.status)) ?? null
+  }
+
+  private shouldResumeAgent(agent: AgentRecord): boolean {
+    return agent.status !== 'reviewing' || agent.progress < 100 || agent.queue > 0
   }
 
   private async requireSnapshot(projectRoot: string): Promise<ProjectSnapshot> {

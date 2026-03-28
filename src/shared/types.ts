@@ -55,6 +55,9 @@ export interface AgentRecord extends AgentProfile {
   queue: number
   focus: string
   lastUpdate: string
+  activitySummary: string
+  lastActivityAt: string | null
+  resumeCount: number
   tempAgents: string[]
   pid: number | null
   sessionId: string | null
@@ -116,6 +119,8 @@ export interface RunSession {
   status: RunStatus
   startedAt: string
   updatedAt: string
+  lastAgentActivityAt: string | null
+  resumeCount: number
   agentIds: AgentRole[]
   summary: string
   blockers: string[]
@@ -230,6 +235,7 @@ export interface VibePlannerApi {
     start: (input: RunStartInput) => Promise<RunSession>
     pause: (input: RunMutationInput) => Promise<RunSession>
     resume: (input: RunMutationInput) => Promise<RunSession>
+    recover: (projectRoot: string) => Promise<RunSession | null>
     list: (projectRoot: string) => Promise<RunSession[]>
   }
   bug: {

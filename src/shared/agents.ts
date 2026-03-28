@@ -95,6 +95,9 @@ export function createInitialAgentRecords(): AgentRecord[] {
     queue: 0,
     focus: profile.mission,
     lastUpdate: 'Awaiting assignment.',
+    activitySummary: 'No live activity yet.',
+    lastActivityAt: null,
+    resumeCount: 0,
     tempAgents: [],
     pid: null,
     sessionId: null,
@@ -116,6 +119,7 @@ export function buildAgentPrompt(
   inbox: string,
   objectiveOverride?: string,
   runId?: string | null,
+  resumeContext?: string,
 ): string {
   const objective = objectiveOverride ?? agent.mission
 
@@ -134,6 +138,9 @@ Project:
 - Browser mode: ${project.browserMode}
 - Runtime model: ${project.codexRuntime.model}
 - Reasoning effort: ${project.codexRuntime.reasoningEffort}
+- Agent workspace: ${project.workspacePath}/${agent.folderName}
+- Shared messages: ${project.workspacePath}/messages/index.json
+- Checkpoint file: ${project.workspacePath}/${agent.folderName}/status.md
 
 Role contract:
 - Allowed actions: ${agent.permissions.join('; ')}
@@ -145,10 +152,15 @@ Operating rules:
 - Work autonomously and continue proactively until your completion criteria are satisfied.
 - Stay strictly inside the approved project root and the vibeplanner workspace.
 - Read the project brief and current workspace files before making decisions.
+- Resume unfinished work instead of restarting from scratch whenever prior notes, decisions, or checkpoints exist.
+- Keep ${project.workspacePath}/${agent.folderName}/status.md current with your latest plan, progress, and next actions.
 - Log decisions, outputs, and blockers into your own agent folder.
 - Use the shared messages folder for handoffs and questions.
 - Do not copy external third-party code into the project. External references are patterns only.
 - Prefer action, verification, and persisted evidence over commentary.
+
+Resume context:
+${resumeContext || 'No previous checkpoint context was found. Create one as you work.'}
 
 Current inbox:
 ${inbox || 'No pending messages.'}

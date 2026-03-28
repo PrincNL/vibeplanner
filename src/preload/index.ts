@@ -22,6 +22,7 @@ const api: VibePlannerApi = {
     start: (input) => ipcRenderer.invoke('run.start', input),
     pause: (input) => ipcRenderer.invoke('run.pause', input),
     resume: (input) => ipcRenderer.invoke('run.resume', input),
+    recover: (projectRoot) => ipcRenderer.invoke('run.recover', projectRoot),
     list: (projectRoot) => ipcRenderer.invoke('run.list', projectRoot),
   },
   bug: {
