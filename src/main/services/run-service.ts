@@ -57,10 +57,14 @@ export class RunService {
       ...agent,
       status: agent.id === 'strategy' ? 'planning' : 'working',
       queue: 1,
-      progress: agent.id === 'strategy' ? 15 : 5,
-      focus: 'Executing initial assignment from project brief.',
+      progress: agent.id === 'strategy' ? 15 : agent.id === 'operator' ? 12 : 5,
+      focus: agent.id === 'operator'
+        ? 'Translate the run into a plain-English progress narrative for the human.'
+        : 'Executing initial assignment from project brief.',
       lastUpdate: `Queued for run ${run.id}.`,
-      activitySummary: 'Preparing initial workspace scan.',
+      activitySummary: agent.id === 'operator'
+        ? 'Preparing the first human-facing summary.'
+        : 'Preparing initial workspace scan.',
       lastActivityAt: startedAt,
     }))
 
@@ -199,7 +203,9 @@ export class RunService {
         queue: Math.max(agent.queue, 1),
         progress: Math.max(agent.progress, 15),
         lastUpdate: `Recovered for run ${run.id}.`,
-        activitySummary: 'Reloading persisted checkpoint and continuing work.',
+        activitySummary: agent.id === 'operator'
+          ? 'Reloading the latest checkpoint and rebuilding the human-facing summary.'
+          : 'Reloading persisted checkpoint and continuing work.',
         lastActivityAt: now,
         pid: null,
         sessionId: null,

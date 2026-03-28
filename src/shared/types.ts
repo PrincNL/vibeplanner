@@ -4,6 +4,7 @@ import type { RepoMode } from './workspace'
 
 export type BrowserMode = 'hybrid'
 export type AgentRole =
+  | 'operator'
   | 'research'
   | 'strategy'
   | 'development-1'

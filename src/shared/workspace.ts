@@ -3,6 +3,7 @@ import path from 'node:path'
 export type RepoMode = 'new' | 'existing'
 
 export const WORKSPACE_DIRECTORIES = [
+  'operator-agent',
   'research-agent',
   'strategy-agent',
   'development-agent-1',

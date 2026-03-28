@@ -2,6 +2,18 @@ import type { AgentProfile, AgentRecord, AgentRole, ProjectConfig } from './type
 
 export const CORE_AGENT_PROFILES: AgentProfile[] = [
   {
+    id: 'operator',
+    name: 'Operator Agent',
+    roleLabel: 'Human Guide',
+    folderName: 'operator-agent',
+    mission: 'Translate team activity into plain English, keep the user informed, and explain what happens next.',
+    permissions: ['read project files', 'read workspace outputs', 'write user-facing summaries', 'request only essential human input'],
+    expectedArtifacts: ['operator-summary.md', 'phase-updates.md', 'handoff notes'],
+    escalationPolicy: 'Ask the user only when there is a concrete missing decision, credential, or approval.',
+    completionCriteria: ['The current phase is understandable', 'the next step is explicit', 'blockers are explained in plain English'],
+    canSpawnTemporaryAgents: false,
+  },
+  {
     id: 'research',
     name: 'Research Agent',
     roleLabel: 'Discovery',
@@ -122,6 +134,15 @@ export function buildAgentPrompt(
   resumeContext?: string,
 ): string {
   const objective = objectiveOverride ?? agent.mission
+  const operatorAppendix = agent.id === 'operator'
+    ? `
+Special focus for the Operator Agent:
+- Write for a human, not for another agent.
+- Keep explanations concise, plain, and action-oriented.
+- Maintain a running explanation of what the team is doing now, what is blocked, and what the human should expect next.
+- If you need user input, ask exactly one concrete question and explain why it matters.
+`.trim()
+    : ''
 
   return `
 You are ${agent.name}, one of the core VibePlanner agents.
@@ -158,6 +179,7 @@ Operating rules:
 - Use the shared messages folder for handoffs and questions.
 - Do not copy external third-party code into the project. External references are patterns only.
 - Prefer action, verification, and persisted evidence over commentary.
+${operatorAppendix ? `- ${operatorAppendix.split('\n').join('\n- ')}` : ''}
 
 Resume context:
 ${resumeContext || 'No previous checkpoint context was found. Create one as you work.'}

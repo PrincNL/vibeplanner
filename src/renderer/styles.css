@@ -265,6 +265,17 @@ a:hover {
   flex-wrap: wrap;
 }
 
+.project-guide {
+  margin-top: 0.8rem;
+  padding-top: 0.72rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.project-guide p {
+  color: #d9e4e1;
+  font-size: 0.78rem;
+}
+
 .project-mini-stats span {
   display: inline-flex;
   align-items: center;
@@ -426,6 +437,10 @@ a:hover {
   font-size: 0.72rem;
 }
 
+.live-summary.emphasis {
+  color: #dfe8e5;
+}
+
 .top-actions {
   display: flex;
   gap: 0.55rem;
@@ -575,6 +590,66 @@ a:hover {
   background: rgba(255, 255, 255, 0.06);
   color: #c7d2cf;
   font-size: 0.72rem;
+}
+
+.workflow-strip {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.workflow-step {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+  color: #9caaa5;
+  font-family:
+    "IBM Plex Mono",
+    "SFMono-Regular",
+    monospace;
+  font-size: 0.72rem;
+  text-align: center;
+}
+
+.workflow-step.is-done {
+  border-color: rgba(91, 179, 132, 0.2);
+  background: rgba(91, 179, 132, 0.12);
+  color: #bfe5cd;
+}
+
+.workflow-step.is-active {
+  border-color: rgba(103, 155, 210, 0.24);
+  background: rgba(103, 155, 210, 0.14);
+  color: #d2e7fa;
+}
+
+.guided-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.guided-card {
+  padding: 0.9rem 0.95rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at top right, rgba(109, 139, 255, 0.08), transparent 35%),
+    rgba(255, 255, 255, 0.02);
+}
+
+.guided-card h4 {
+  margin: 0 0 0.28rem;
+}
+
+.guided-card p:last-child {
+  margin-top: 0.35rem;
 }
 
 .section-block:first-child {
@@ -1158,7 +1233,9 @@ select:focus {
   .split-section,
   .detail-list,
   .inline-stats,
-  .form-grid {
+  .form-grid,
+  .guided-grid,
+  .workflow-strip {
     grid-template-columns: 1fr;
   }
 

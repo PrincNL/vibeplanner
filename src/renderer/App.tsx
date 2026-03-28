@@ -32,6 +32,7 @@ type IconName =
   | 'code'
   | 'beaker'
   | 'package'
+  | 'chat'
   | 'chevron'
 
 function iconPath(name: IconName) {
@@ -74,6 +75,8 @@ function iconPath(name: IconName) {
       return 'M9 3h6m-4 0v5l-5 8a3 3 0 002.6 4.5h7.8A3 3 0 0019 16l-5-8V3m-4 9h4'
     case 'package':
       return 'M12 3l7 4v10l-7 4-7-4V7l7-4zm0 0v8m7-4l-7 4-7-4'
+    case 'chat':
+      return 'M5 6.5A2.5 2.5 0 017.5 4h9A2.5 2.5 0 0119 6.5v6A2.5 2.5 0 0116.5 15H10l-4 4v-4H7.5A2.5 2.5 0 015 12.5v-6z'
     case 'chevron':
       return 'M9 6l6 6-6 6'
   }
@@ -131,6 +134,8 @@ function getSectionIcon(tabId: TabId): IconName {
 
 function getAgentIcon(role: AgentRole): IconName {
   switch (role) {
+    case 'operator':
+      return 'chat'
     case 'strategy':
       return 'brain'
     case 'research':
@@ -148,10 +153,10 @@ function getAgentIcon(role: AgentRole): IconName {
 
 function getStatusTone(status: SystemStatus | null, busy: boolean) {
   if (busy) {
-    return 'Working'
+    return 'Running tasks'
   }
   if (status?.preflight.ok) {
-    return 'Clear lane'
+    return 'Ready to guide the run'
   }
   return 'Needs setup'
 }
@@ -242,13 +247,13 @@ function getTabTitle(tabId: TabId) {
 function getTabSummary(tabId: TabId) {
   switch (tabId) {
     case 'onboarding':
-      return 'Verify Codex, understand the flow, then move into project setup.'
+      return 'Check Codex, auth, and browser readiness before you start a client run.'
     case 'project':
-      return 'Choose the folder, repo mode, and Markdown brief that define the workspace.'
+      return 'Attach the real project folder and brief so the team knows where to work.'
     case 'dashboard':
-      return 'Track run health, blockers, and the overall state of the agent team.'
+      return 'See what the team is doing now, what comes next, and where human input is needed.'
     case 'agents':
-      return 'Inspect agent state, launch or stop workers, and read live execution logs.'
+      return 'Advanced view for raw agent state, control, and log inspection.'
     case 'bugs':
       return 'Review the triaged bug queue and move issues through the fix lifecycle.'
     case 'research':
@@ -258,6 +263,120 @@ function getTabSummary(tabId: TabId) {
     case 'settings':
       return 'Review runtime policy and trigger browser smoke checks.'
   }
+}
+
+type WorkflowStage = {
+  id: string
+  label: string
+  state: 'todo' | 'active' | 'done'
+}
+
+function deriveWorkflowStages(snapshot: ProjectSnapshot | null, status: SystemStatus | null): WorkflowStage[] {
+  const hasProject = Boolean(snapshot)
+  const hasRun = Boolean(snapshot?.runs.length)
+  const activeRun = findRecoverableRun(snapshot)
+  const hasImplementation = Boolean(
+    snapshot?.agents.some((agent) => (agent.id === 'development-1' || agent.id === 'development-2') && agent.progress > 0),
+  )
+  const hasTesting = Boolean(snapshot?.bugs.length || snapshot?.agents.some((agent) => agent.id.startsWith('testing') && agent.progress > 0))
+  const hasRelease = Boolean(snapshot?.agents.find((agent) => agent.id === 'production' && agent.progress > 0))
+
+  return [
+    { id: 'preflight', label: 'Ready', state: status?.preflight.ok ? 'done' : 'active' },
+    { id: 'attach', label: 'Attach project', state: hasProject ? 'done' : status?.preflight.ok ? 'active' : 'todo' },
+    { id: 'brief', label: 'Understand brief', state: snapshot?.project.copiedBriefPath ? 'done' : hasProject ? 'active' : 'todo' },
+    { id: 'plan', label: 'Plan work', state: hasRun ? (activeRun ? 'active' : 'done') : hasProject ? 'active' : 'todo' },
+    { id: 'build', label: 'Build', state: hasImplementation ? (hasTesting || hasRelease ? 'done' : 'active') : hasRun ? 'active' : 'todo' },
+    { id: 'test', label: 'Test', state: hasTesting ? (snapshot?.bugs.some((bug) => bug.status !== 'fixed') ? 'active' : 'done') : hasImplementation ? 'active' : 'todo' },
+    { id: 'ship', label: 'Ship', state: hasRelease ? 'active' : hasTesting ? 'active' : 'todo' },
+  ]
+}
+
+function getOperatorAgent(snapshot: ProjectSnapshot | null) {
+  return snapshot?.agents.find((agent) => agent.id === 'operator') ?? null
+}
+
+function getLeadAgent(snapshot: ProjectSnapshot | null) {
+  return snapshot?.agents
+    .filter((agent) => agent.id !== 'operator')
+    .sort((left, right) => {
+      const leftLive = Number(isAgentLive(left))
+      const rightLive = Number(isAgentLive(right))
+      if (leftLive !== rightLive) {
+        return rightLive - leftLive
+      }
+      return right.progress - left.progress
+    })[0] ?? null
+}
+
+function getCurrentObjective(snapshot: ProjectSnapshot | null) {
+  const leadAgent = getLeadAgent(snapshot)
+  if (!snapshot) {
+    return 'Attach a project to begin.'
+  }
+  if (!snapshot.runs.length) {
+    return 'Review the brief and start the first guided run.'
+  }
+  if (leadAgent) {
+    return leadAgent.focus
+  }
+  return snapshot.runs[0]?.summary ?? 'Waiting for the next run command.'
+}
+
+function getPrimaryBlocker(snapshot: ProjectSnapshot | null, status: SystemStatus | null) {
+  if (!status?.preflight.ok) {
+    return status?.preflight.guidance[0] ?? 'Codex preflight still has blockers.'
+  }
+  const blockedAgent = snapshot?.agents.find((agent) => agent.status === 'blocked')
+  if (blockedAgent) {
+    return `${blockedAgent.name}: ${blockedAgent.lastUpdate}`
+  }
+  const openBug = snapshot?.bugs.find((bug) => bug.status !== 'fixed')
+  if (openBug) {
+    return `${openBug.title} is still in ${openBug.status}.`
+  }
+  return 'No immediate blocker is recorded.'
+}
+
+function getNextExpectedOutcome(snapshot: ProjectSnapshot | null) {
+  if (!snapshot) {
+    return 'A workspace snapshot after you attach a project.'
+  }
+  if (!snapshot.runs.length) {
+    return 'A scoped execution plan from the strategy and operator agents.'
+  }
+  if (snapshot.bugs.some((bug) => bug.status !== 'fixed')) {
+    return 'A clearer fix handoff and updated bug status.'
+  }
+  const liveAgent = snapshot.agents.find((agent) => isAgentLive(agent))
+  if (liveAgent) {
+    return `${liveAgent.name} should produce a persisted checkpoint or handoff next.`
+  }
+  return 'A reviewed checkpoint that moves the run into the next phase.'
+}
+
+function getHumanAction(snapshot: ProjectSnapshot | null, status: SystemStatus | null) {
+  if (!status?.preflight.ok) {
+    return 'Resolve the Codex preflight issue before starting a run.'
+  }
+  if (!snapshot) {
+    return 'Open Project Setup and attach the client folder and brief.'
+  }
+  if (!snapshot.project.copiedBriefPath) {
+    return 'Attach a Markdown brief so the team has a scoped objective.'
+  }
+  if (!snapshot.runs.length) {
+    return 'Start the first core run and let the operator summarize the plan.'
+  }
+  const pausedRun = snapshot.runs.find((run) => run.status === 'paused')
+  if (pausedRun) {
+    return 'Resume the paused run when you are ready to continue.'
+  }
+  const blockedAgent = snapshot.agents.find((agent) => agent.status === 'blocked')
+  if (blockedAgent) {
+    return `Open Agents and inspect ${blockedAgent.name} if you want the raw blocker trace.`
+  }
+  return 'Watch the Workspace view. Only intervene if the operator asks for a decision.'
 }
 
 function App() {
@@ -271,7 +390,7 @@ function App() {
   const [briefInput, setBriefInput] = useState('')
   const [projectName, setProjectName] = useState('VibePlanner Workspace')
   const [projectMode, setProjectMode] = useState<'new' | 'existing'>('new')
-  const [selectedAgentId, setSelectedAgentId] = useState<AgentRole>('strategy')
+  const [selectedAgentId, setSelectedAgentId] = useState<AgentRole>('operator')
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
   const [selectedBugId, setSelectedBugId] = useState<string | null>(null)
   const [agentLogs, setAgentLogs] = useState('No logs loaded.')
@@ -280,6 +399,13 @@ function App() {
   const recoveredRootsRef = useRef<Set<string>>(new Set())
   const pollingRef = useRef(false)
   const recoverableRun = useMemo(() => findRecoverableRun(snapshot), [snapshot])
+  const operatorAgent = useMemo(() => getOperatorAgent(snapshot), [snapshot])
+  const leadAgent = useMemo(() => getLeadAgent(snapshot), [snapshot])
+  const workflowStages = useMemo(() => deriveWorkflowStages(snapshot, status), [snapshot, status])
+  const currentObjective = useMemo(() => getCurrentObjective(snapshot), [snapshot])
+  const primaryBlocker = useMemo(() => getPrimaryBlocker(snapshot, status), [snapshot, status])
+  const nextExpectedOutcome = useMemo(() => getNextExpectedOutcome(snapshot), [snapshot])
+  const humanAction = useMemo(() => getHumanAction(snapshot, status), [snapshot, status])
   const liveAgentCount = useMemo(
     () => snapshot?.agents.filter((agent) => isAgentLive(agent)).length ?? 0,
     [snapshot],
@@ -630,6 +756,10 @@ function App() {
               {snapshot?.bugs.length ?? 0} bugs
             </span>
           </div>
+          <div className="project-guide">
+            <span className="eyebrow">Next action</span>
+            <p>{humanAction}</p>
+          </div>
         </div>
 
         <nav className="tab-nav">
@@ -677,20 +807,25 @@ function App() {
                   : 'No live execution in progress'}
               </p>
             ) : null}
+            {snapshot ? (
+              <p className="live-summary emphasis">
+                Current objective: {currentObjective}
+              </p>
+            ) : null}
           </div>
           <div className="top-actions">
             <button className="secondary" onClick={() => void refreshProject()} disabled={!snapshot || busy}>
               <Icon name="refresh" className="inline-icon" />
               Refresh
             </button>
-            <button className="primary" onClick={() => void handleStartRun()} disabled={!snapshot || busy}>
-              <Icon name="rocket" className="inline-icon" />
-              {recoverableRun
-                ? recoverableRun.status === 'paused'
-                  ? 'Resume Core Run'
-                  : 'Recover Core Run'
-                : 'Start Core Run'}
-            </button>
+              <button className="primary" onClick={() => void handleStartRun()} disabled={!snapshot || busy}>
+                <Icon name="rocket" className="inline-icon" />
+                {recoverableRun
+                  ? recoverableRun.status === 'paused'
+                  ? 'Resume Guided Run'
+                  : 'Recover Guided Run'
+                : 'Start Guided Run'}
+              </button>
           </div>
         </header>
 
@@ -731,7 +866,17 @@ function App() {
               />
             ) : null}
             {activeTab === 'dashboard' ? (
-              <DashboardView snapshot={snapshot} status={status} />
+              <DashboardView
+                snapshot={snapshot}
+                status={status}
+                workflowStages={workflowStages}
+                operatorAgent={operatorAgent}
+                leadAgent={leadAgent}
+                currentObjective={currentObjective}
+                primaryBlocker={primaryBlocker}
+                nextExpectedOutcome={nextExpectedOutcome}
+                humanAction={humanAction}
+              />
             ) : null}
             {activeTab === 'agents' ? (
               <AgentsView
@@ -996,7 +1141,7 @@ function ProjectSetupView(props: ProjectSetupViewProps) {
         <div className="section-subblock">
           <h4>Workspace impact</h4>
           <ul className="plain-list">
-            <li>Creates the fixed 7 core agent folders plus bugs, runs, messages, and artifacts.</li>
+            <li>Creates the operator plus the core build agents, then seeds bugs, runs, messages, and artifacts.</li>
             <li>Initializes Git automatically for new projects.</li>
             <li>Copies the brief into the local workspace so Codex can access it safely.</li>
             <li>Locks agent autonomy to the approved project root using Codex workspace-write sandboxing.</li>
@@ -1017,9 +1162,23 @@ function ProjectSetupView(props: ProjectSetupViewProps) {
 function DashboardView({
   snapshot,
   status,
+  workflowStages,
+  operatorAgent,
+  leadAgent,
+  currentObjective,
+  primaryBlocker,
+  nextExpectedOutcome,
+  humanAction,
 }: {
   snapshot: ProjectSnapshot | null
   status: SystemStatus | null
+  workflowStages: WorkflowStage[]
+  operatorAgent: AgentRecord | null
+  leadAgent: AgentRecord | null
+  currentObjective: string
+  primaryBlocker: string
+  nextExpectedOutcome: string
+  humanAction: string
 }) {
   if (!snapshot) {
     return <EmptyState title="No project attached" body="Open Project Setup to attach a repo or create a new workspace." />
@@ -1029,15 +1188,15 @@ function DashboardView({
     <section className="stack">
       <section className="hero-strip dashboard-hero">
         <div className="hero-strip-badge">
-          <Icon name="rocket" className="section-icon" />
+          <Icon name="chat" className="section-icon" />
         </div>
         <div className="hero-strip-copy">
-          <p className="eyebrow">Agent cockpit</p>
-          <h3>{status?.preflight.ok ? 'The lane is open. Keep the team moving.' : 'The lane still has blockers to clear.'}</h3>
+          <p className="eyebrow">Operator summary</p>
+          <h3>{operatorAgent?.activitySummary ?? 'The operator will summarize the run here once work starts.'}</h3>
           <div className="hero-strip-tags">
-            <span>{snapshot.agents.length} core agents</span>
-            <span>{snapshot.runs.length} runs</span>
-            <span>{snapshot.bugs.length} tracked bugs</span>
+            <span>{workflowStages.find((stage) => stage.state === 'active')?.label ?? 'Ready'}</span>
+            <span>{leadAgent?.name ?? 'No active lead'}</span>
+            <span>{snapshot.bugs.filter((bug) => bug.status !== 'fixed').length} open issues</span>
           </div>
         </div>
       </section>
@@ -1048,30 +1207,37 @@ function DashboardView({
             <div className="section-icon-badge accent-grid">
               <Icon name="grid" className="section-icon" />
             </div>
-            <h3>Overview</h3>
+            <h3>Guided lane</h3>
           </div>
         </div>
-        <div className="inline-stats">
-          <div className="stat-card">
-            <Icon name="agents" className="stat-icon" />
-            <span>Active agents</span>
-            <strong>{snapshot.agents.filter((agent) => agent.status !== 'idle').length}</strong>
-          </div>
-          <div className="stat-card">
-            <Icon name="bug" className="stat-icon" />
-            <span>Bug queue</span>
-            <strong>{snapshot.bugs.length}</strong>
-          </div>
-          <div className="stat-card">
-            <Icon name="run" className="stat-icon" />
-            <span>Runs</span>
-            <strong>{snapshot.runs.length}</strong>
-          </div>
-          <div className="stat-card">
-            <Icon name="shield" className="stat-icon" />
-            <span>Preflight</span>
-            <strong>{status?.preflight.ok ? 'Clear' : 'Blocked'}</strong>
-          </div>
+        <div className="workflow-strip">
+          {workflowStages.map((stage) => (
+            <div key={stage.id} className={`workflow-step is-${stage.state}`}>
+              <span>{stage.label}</span>
+            </div>
+          ))}
+        </div>
+        <div className="guided-grid">
+          <section className="guided-card">
+            <p className="eyebrow">Current objective</p>
+            <h4>{currentObjective}</h4>
+            <p>{leadAgent ? `${leadAgent.name} is the current lead.` : 'No active lead agent yet.'}</p>
+          </section>
+          <section className="guided-card">
+            <p className="eyebrow">Next expected outcome</p>
+            <h4>{nextExpectedOutcome}</h4>
+            <p>The operator should turn the next checkpoint into a plain-English summary.</p>
+          </section>
+          <section className="guided-card">
+            <p className="eyebrow">Primary blocker</p>
+            <h4>{primaryBlocker}</h4>
+            <p>{status?.preflight.ok ? 'If this changes, the operator summary should update automatically.' : 'Resolve setup before running the team.'}</p>
+          </section>
+          <section className="guided-card">
+            <p className="eyebrow">Human action</p>
+            <h4>{humanAction}</h4>
+            <p>This is the only thing the human should need to think about right now.</p>
+          </section>
         </div>
       </section>
 
@@ -1081,7 +1247,7 @@ function DashboardView({
             <div className="section-icon-badge accent-agents">
               <Icon name="agents" className="section-icon" />
             </div>
-            <h4>Live heartbeat</h4>
+            <h4>Live team heartbeat</h4>
           </div>
         </div>
         <div className="heartbeat-list">
@@ -1552,6 +1718,8 @@ function InspectorView({
               <li>Repo mode: {snapshot.project.repoMode}</li>
               <li>Workspace: {snapshot.project.workspacePath}</li>
               <li>Brief copy: {snapshot.project.copiedBriefPath ?? 'Not attached'}</li>
+              <li>Operator: {getOperatorAgent(snapshot)?.activitySummary ?? 'No operator summary yet.'}</li>
+              <li>Next human action: {getHumanAction(snapshot, status)}</li>
             </ul>
           </>
         ) : null}

@@ -16,7 +16,7 @@ import type {
   RunSession,
 } from '@shared/types'
 import type { CodexPreflightResult } from '@shared/codex'
-import { getWorkspacePaths, buildWorkspaceBootstrapPlan } from '@shared/workspace'
+import { WORKSPACE_DIRECTORIES, getWorkspacePaths, buildWorkspaceBootstrapPlan } from '@shared/workspace'
 import { readJsonFile, writeJsonFile } from './json-store'
 
 const execFileAsync = promisify(execFile)
@@ -52,6 +52,7 @@ export class ProjectService {
 
   async loadSnapshot(projectRoot: string, preflight: CodexPreflightResult): Promise<ProjectSnapshot> {
     const paths = getWorkspacePaths(path.resolve(projectRoot))
+    await this.ensureWorkspaceStructure(paths.workspaceRoot)
     const project = projectSchema.parse(await readJsonFile(paths.projectConfigFile, null))
     const [storedAgents, storedBugs, research, storedRuns, messages, artifacts] = await Promise.all([
       readJsonFile<Partial<AgentRecord>[]>(paths.agentsFile, createInitialAgentRecords()),
@@ -105,6 +106,13 @@ export class ProjectService {
   async saveResearch(projectRoot: string, research: ResearchSource[]) {
     const paths = getWorkspacePaths(path.resolve(projectRoot))
     await writeJsonFile(paths.researchFile, research)
+  }
+
+  private async ensureWorkspaceStructure(workspaceRoot: string) {
+    await Promise.all(
+      WORKSPACE_DIRECTORIES.map((segment) => mkdir(path.join(workspaceRoot, segment), { recursive: true })),
+    )
+    await this.seedWorkspaceNotes(path.dirname(workspaceRoot))
   }
 
   private async initializeProject(input: CreateProjectInput): Promise<ProjectConfig> {

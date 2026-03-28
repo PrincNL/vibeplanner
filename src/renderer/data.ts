@@ -2,10 +2,10 @@ import { createInitialAgentRecords } from '@shared/agents'
 import type { AppSeed, TabDefinition } from './types'
 
 export const tabs: TabDefinition[] = [
-  { id: 'onboarding', label: 'Onboarding', hint: 'Preflight' },
-  { id: 'project', label: 'Project Setup', hint: 'Workspace' },
-  { id: 'dashboard', label: 'Dashboard', hint: 'Control' },
-  { id: 'agents', label: 'Agents', hint: 'Coordination' },
+  { id: 'onboarding', label: 'Onboarding', hint: 'Check' },
+  { id: 'project', label: 'Project Setup', hint: 'Attach' },
+  { id: 'dashboard', label: 'Workspace', hint: 'Guide' },
+  { id: 'agents', label: 'Agents', hint: 'Advanced' },
   { id: 'bugs', label: 'Bugs', hint: 'Triage' },
   { id: 'research', label: 'Research', hint: 'Evidence' },
   { id: 'runs', label: 'Runs', hint: 'History' },
@@ -61,7 +61,7 @@ export function createFallbackSeed(): AppSeed {
       },
       agents: createInitialAgentRecords().map((agent, index) => ({
         ...agent,
-        status: agent.id === 'strategy' ? 'planning' : index > 3 ? 'reviewing' : 'working',
+        status: agent.id === 'strategy' ? 'planning' : index > 4 ? 'reviewing' : 'working',
         progress: 35 + index * 8,
         queue: Math.max(0, 4 - index),
         focus: agent.mission,
@@ -111,7 +111,7 @@ export function createFallbackSeed(): AppSeed {
           updatedAt: timestamp,
           lastAgentActivityAt: timestamp,
           resumeCount: 1,
-          agentIds: ['strategy', 'research', 'development-1', 'development-2', 'testing-1', 'testing-2', 'production'],
+          agentIds: ['operator', 'strategy', 'research', 'development-1', 'development-2', 'testing-1', 'testing-2', 'production'],
           summary: 'Strategy routed the work and the active agents are executing their first tasks.',
           blockers: ['Need real project attachment before live Codex execution.'],
         },
@@ -119,13 +119,13 @@ export function createFallbackSeed(): AppSeed {
       messages: [
         {
           id: 'message-sample-1',
-          from: 'strategy',
+          from: 'operator',
           to: 'development-1',
           type: 'decision',
           linkedRunId: 'run-sample-1',
           linkedBugId: null,
           linkedTask: 'Bootstrap app shell',
-          body: 'Own the desktop shell and IPC contract. Coordinate persistence details with Development Agent 2.',
+          body: 'The user-facing summary now says the desktop shell is the current focus. Coordinate persistence details with Development Agent 2.',
           createdAt: timestamp,
         },
       ],
