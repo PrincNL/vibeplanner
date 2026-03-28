@@ -12,11 +12,6 @@ import { tabs, createFallbackSeed } from './data'
 import type { TabId } from './types'
 
 const fallback = createFallbackSeed()
-const sidebarGroups: Array<{ label: string; ids: TabId[] }> = [
-  { label: 'Setup', ids: ['onboarding', 'project'] },
-  { label: 'Operate', ids: ['dashboard', 'agents'] },
-  { label: 'Review', ids: ['bugs', 'research', 'runs', 'settings'] },
-]
 
 function hasApi() {
   return typeof window !== 'undefined' && Boolean(window.vibeplanner)
@@ -52,6 +47,7 @@ function getTabSummary(tabId: TabId) {
 }
 
 function App() {
+  const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform)
   const [activeTab, setActiveTab] = useState<TabId>('onboarding')
   const [status, setStatus] = useState<SystemStatus | null>(hasApi() ? null : fallback.status)
   const [snapshot, setSnapshot] = useState<ProjectSnapshot | null>(hasApi() ? null : fallback.snapshot)
@@ -285,12 +281,12 @@ function App() {
   }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${isMac ? 'is-macos' : ''}`}>
       <aside className="nav-panel">
         <div className="brand-block">
           <div className="brand-mark">VP</div>
           <div>
-            <p className="eyebrow">Desktop orchestration</p>
+            <p className="eyebrow">Codex workspace</p>
             <h1>VibePlanner</h1>
           </div>
         </div>
@@ -301,30 +297,15 @@ function App() {
           <p>{snapshot?.project.rootPath ?? 'Select a directory to begin.'}</p>
         </div>
 
-        <nav className="sidebar-groups">
-          {sidebarGroups.map((group) => (
-            <div key={group.label} className="nav-group">
-              <p className="nav-group-label">{group.label}</p>
-              <div className="tab-nav">
-                {group.ids.map((tabId) => {
-                  const tab = tabs.find((entry) => entry.id === tabId)
-                  if (!tab) {
-                    return null
-                  }
-
-                  return (
-                    <button
-                      key={tab.id}
-                      className={`tab-pill ${activeTab === tab.id ? 'is-active' : ''}`}
-                      onClick={() => switchTab(tab.id)}
-                    >
-                      <span>{tab.label}</span>
-                      <small>{tab.hint}</small>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
+        <nav className="tab-nav">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              className={`tab-pill ${activeTab === tab.id ? 'is-active' : ''}`}
+              onClick={() => switchTab(tab.id)}
+            >
+              <span>{tab.label}</span>
+            </button>
           ))}
         </nav>
 
@@ -340,7 +321,12 @@ function App() {
         <header className="top-bar">
           <div className="top-bar-copy">
             <p className="eyebrow">Workspace</p>
-            <h2>{getTabTitle(activeTab)}</h2>
+            <div className="top-bar-meta">
+              <h2>{getTabTitle(activeTab)}</h2>
+              <div className={`status-badge ${status?.preflight.ok ? 'ok' : 'critical'}`}>
+                {status?.preflight.ok ? 'Ready' : 'Blocked'}
+              </div>
+            </div>
             <p className="top-summary">{getTabSummary(activeTab)}</p>
           </div>
           <div className="top-actions">
@@ -354,9 +340,6 @@ function App() {
         </header>
 
         {error ? <div className="error-banner">{error}</div> : null}
-
-        <OverviewStrip snapshot={snapshot} status={status} activeTab={activeTab} />
-
         <section className="content-grid">
           <div className="workspace-panel">
             {activeTab === 'onboarding' ? (
@@ -462,93 +445,55 @@ function OnboardingView({
 }) {
   return (
     <section className="stack">
-      <article className="hero-card">
-        <p className="eyebrow">How it works</p>
-        <h3>Use Codex locally in 3 steps</h3>
-        <p>
-          1. Verify Codex CLI and ChatGPT login.
-          2. Attach a repo or create one and add your Markdown brief.
-          3. Start a core run so VibePlanner launches the agent team in that folder.
+      <section className="section-block">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Codex</p>
+            <h3>Desktop readiness</h3>
+          </div>
+          <div className={`status-badge ${status?.preflight.ok ? 'ok' : 'critical'}`}>
+            {status?.preflight.ok ? 'Ready' : 'Blocked'}
+          </div>
+        </div>
+        <p className="section-copy">
+          Verify Codex first, then move to Project Setup and attach a folder. The app should only
+          feel actionable once this gate is clear.
         </p>
+        <dl className="detail-list">
+          <div>
+            <dt>Codex path</dt>
+            <dd>{status?.codexPath ?? 'Missing'}</dd>
+          </div>
+          <div>
+            <dt>Path source</dt>
+            <dd>{status?.codexPathSource ?? 'Unresolved'}</dd>
+          </div>
+          <div>
+            <dt>Login</dt>
+            <dd>{status?.preflight.loginState ?? 'unknown'}</dd>
+          </div>
+          <div>
+            <dt>Version</dt>
+            <dd>{status?.preflight.detectedVersion ?? 'unknown'}</dd>
+          </div>
+          <div>
+            <dt>Shell</dt>
+            <dd>{status?.shellPath ?? 'unknown'}</dd>
+          </div>
+          <div>
+            <dt>Browser lane</dt>
+            <dd>{status?.browserReady ? 'Ready' : 'Unavailable'}</dd>
+          </div>
+        </dl>
         <div className="button-row">
           <button className="primary" onClick={onGoProject}>Go to Project Setup</button>
         </div>
-      </article>
+      </section>
 
-      <div className="workflow-grid">
-        <WorkflowStep
-          step="01"
-          title="Verify Codex"
-          body="Check that Codex CLI is installed, logged in, and available to the desktop app."
-          tone={status?.preflight.ok ? 'ok' : 'warning'}
-        />
-        <WorkflowStep
-          step="02"
-          title="Choose a project"
-          body="Point VibePlanner at a new folder or an existing repository, then attach the brief."
-          tone="neutral"
-        />
-        <WorkflowStep
-          step="03"
-          title="Launch the team"
-          body="Start a core run and let the strategy, dev, test, and production agents begin work."
-          tone="neutral"
-        />
-      </div>
-
-      <div className="card-grid two-up">
-        <MetricCard
-          label="Codex path"
-          value={status?.codexPath ?? 'Missing'}
-          tone={status?.preflight.ok ? 'ok' : 'critical'}
-          detail={status?.codexPathSource ? `Resolved via ${status.codexPathSource}` : 'Install required'}
-        />
-        <MetricCard
-          label="Login"
-          value={status?.preflight.loginState ?? 'unknown'}
-          tone={status?.preflight.loginState === 'logged-in' ? 'ok' : 'warning'}
-          detail="ChatGPT-authenticated Codex session"
-        />
-        <MetricCard
-          label="Version"
-          value={status?.preflight.detectedVersion ?? 'unknown'}
-          tone={status?.preflight.detectedVersion ? 'neutral' : 'warning'}
-          detail="Detected from local Codex install"
-        />
-        <MetricCard
-          label="Next step"
-          value={status?.preflight.ok ? 'Attach project' : 'Fix Codex detection'}
-          tone={status?.preflight.ok ? 'ok' : 'warning'}
-          detail={status?.preflight.ok ? 'Open Project Setup and choose a folder' : 'Use the details below'}
-        />
-      </div>
-
-      <article className="info-card">
-        <h4>Detected environment</h4>
-        <div className="meta-grid">
-          <span>Shell: {status?.shellPath ?? 'unknown'}</span>
-          <span>Platform: {status?.platform ?? 'unknown'}</span>
-          <span>Browser lane: {status?.browserReady ? 'Ready' : 'Unavailable'}</span>
+      <section className="section-block">
+        <div className="section-heading">
+          <h4>Preflight issues</h4>
         </div>
-      </article>
-
-      <div className="card-grid two-up">
-        <MetricCard
-          label="Raw login output"
-          value={status?.loginStatusOutput?.trim() || 'No output'}
-          tone="neutral"
-          detail="Direct result from `codex login status`"
-        />
-        <MetricCard
-          label="Raw version output"
-          value={status?.versionOutput?.trim() || 'No output'}
-          tone="neutral"
-          detail="Direct result from `codex --version`"
-        />
-      </div>
-
-      <article className="info-card">
-        <h4>Preflight gate</h4>
         <ul className="plain-list">
           {status?.preflight.issues.length ? (
             status.preflight.issues.map((issue) => <li key={issue}>{issue}</li>)
@@ -557,11 +502,27 @@ function OnboardingView({
           )}
         </ul>
         {status?.preflight.guidance.length ? (
-          <ul className="plain-list">
+          <ul className="plain-list secondary-list">
             {status.preflight.guidance.map((item) => <li key={item}>{item}</li>)}
           </ul>
         ) : null}
-      </article>
+      </section>
+
+      <div className="split-section">
+        <section className="section-block">
+          <div className="section-heading">
+            <h4>Login output</h4>
+          </div>
+          <pre className="output-block">{status?.loginStatusOutput?.trim() || 'No output'}</pre>
+        </section>
+
+        <section className="section-block">
+          <div className="section-heading">
+            <h4>Version output</h4>
+          </div>
+          <pre className="output-block">{status?.versionOutput?.trim() || 'No output'}</pre>
+        </section>
+      </div>
     </section>
   )
 }
@@ -584,87 +545,70 @@ interface ProjectSetupViewProps {
 function ProjectSetupView(props: ProjectSetupViewProps) {
   return (
     <section className="stack">
-      <article className="info-card">
-        <p className="eyebrow">Bootstrap</p>
-        <h3>Choose where Codex should work</h3>
-        <p>
-          Pick a folder, choose `New project` or `Existing repository`, add the Markdown brief, and
-          VibePlanner will prepare the workspace and treat that folder as Codex's safe execution area.
+      <section className="section-block">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Project</p>
+            <h3>Choose where Codex should work</h3>
+          </div>
+        </div>
+        <p className="section-copy">
+          Pick one folder, define whether it is new or existing, then attach the Markdown brief.
+          VibePlanner will treat that location as the only approved execution area.
         </p>
-      </article>
 
-      <div className="workflow-grid">
-        <WorkflowStep
-          step="01"
-          title="Select folder"
-          body="This becomes the project root and the only directory agents are allowed to modify."
-          tone="neutral"
-        />
-        <WorkflowStep
-          step="02"
-          title="Attach brief"
-          body="The Markdown brief is copied into `vibeplanner/artifacts` so every agent can reference it."
-          tone="neutral"
-        />
-        <WorkflowStep
-          step="03"
-          title="Create workspace"
-          body="VibePlanner seeds the agent folders, state files, bug inbox, runs, and messages."
-          tone="neutral"
-        />
-      </div>
+        <div className="form-grid">
+          <label>
+            <span>Project name</span>
+            <input value={props.projectName} onChange={(event) => props.onNameChange(event.target.value)} />
+          </label>
+          <label>
+            <span>Mode</span>
+            <select value={props.mode} onChange={(event) => props.onModeChange(event.target.value as 'new' | 'existing')}>
+              <option value="new">New project</option>
+              <option value="existing">Existing repository</option>
+            </select>
+          </label>
+        </div>
 
-      <div className="form-grid">
-        <label>
-          <span>Project name</span>
-          <input value={props.projectName} onChange={(event) => props.onNameChange(event.target.value)} />
-        </label>
-        <label>
-          <span>Mode</span>
-          <select value={props.mode} onChange={(event) => props.onModeChange(event.target.value as 'new' | 'existing')}>
-            <option value="new">New project</option>
-            <option value="existing">Existing repository</option>
-          </select>
-        </label>
-      </div>
+        <div className="field-group">
+          <label>
+            <span>Project directory</span>
+            <div className="inline-field">
+              <input value={props.directoryInput} onChange={(event) => props.onDirectoryChange(event.target.value)} />
+              <button className="secondary" onClick={() => void props.onPickDirectory()} disabled={props.busy}>
+                Browse
+              </button>
+            </div>
+          </label>
 
-      <div className="field-group">
-        <label>
-          <span>Project directory</span>
-          <div className="inline-field">
-            <input value={props.directoryInput} onChange={(event) => props.onDirectoryChange(event.target.value)} />
-            <button className="secondary" onClick={() => void props.onPickDirectory()} disabled={props.busy}>
-              Browse
-            </button>
-          </div>
-        </label>
+          <label>
+            <span>Markdown brief</span>
+            <div className="inline-field">
+              <input value={props.briefInput} onChange={(event) => props.onBriefChange(event.target.value)} />
+              <button className="secondary" onClick={() => void props.onPickBrief()} disabled={props.busy}>
+                Select
+              </button>
+            </div>
+          </label>
+        </div>
 
-        <label>
-          <span>Markdown brief</span>
-          <div className="inline-field">
-            <input value={props.briefInput} onChange={(event) => props.onBriefChange(event.target.value)} />
-            <button className="secondary" onClick={() => void props.onPickBrief()} disabled={props.busy}>
-              Select
-            </button>
-          </div>
-        </label>
-      </div>
+        <div className="section-subblock">
+          <h4>Workspace impact</h4>
+          <ul className="plain-list">
+            <li>Creates the fixed 7 core agent folders plus bugs, runs, messages, and artifacts.</li>
+            <li>Initializes Git automatically for new projects.</li>
+            <li>Copies the brief into the local workspace so Codex can access it safely.</li>
+            <li>Locks agent autonomy to the approved project root using Codex workspace-write sandboxing.</li>
+          </ul>
+        </div>
 
-      <article className="checklist-card">
-        <h4>Workspace impact</h4>
-        <ul className="plain-list">
-          <li>Creates the fixed 7 core agent folders plus bugs, runs, messages, and artifacts.</li>
-          <li>Initializes Git automatically for new projects.</li>
-          <li>Copies the brief into the local workspace so Codex can access it safely.</li>
-          <li>Locks agent autonomy to the approved project root using Codex workspace-write sandboxing.</li>
-        </ul>
-      </article>
-
-      <div className="button-row">
-        <button className="primary" onClick={props.onSubmit} disabled={props.busy || !props.directoryInput}>
-          {props.mode === 'new' ? 'Create Project' : 'Attach Repository'}
-        </button>
-      </div>
+        <div className="button-row">
+          <button className="primary" onClick={props.onSubmit} disabled={props.busy || !props.directoryInput}>
+            {props.mode === 'new' ? 'Create Project' : 'Attach Repository'}
+          </button>
+        </div>
+      </section>
     </section>
   )
 }
@@ -682,24 +626,34 @@ function DashboardView({
 
   return (
     <section className="stack">
-      <article className="hero-card compact-hero">
-        <p className="eyebrow">Live picture</p>
-        <h3>{snapshot.project.name}</h3>
-        <p>
-          {snapshot.runs[0]?.summary ??
-            'No run started yet. Finish setup, then start a core run to activate the team.'}
-        </p>
-      </article>
+      <section className="section-block">
+        <div className="section-heading">
+          <h3>Overview</h3>
+        </div>
+        <div className="inline-stats">
+          <div>
+            <span>Active agents</span>
+            <strong>{snapshot.agents.filter((agent) => agent.status !== 'idle').length}</strong>
+          </div>
+          <div>
+            <span>Bug queue</span>
+            <strong>{snapshot.bugs.length}</strong>
+          </div>
+          <div>
+            <span>Runs</span>
+            <strong>{snapshot.runs.length}</strong>
+          </div>
+          <div>
+            <span>Preflight</span>
+            <strong>{status?.preflight.ok ? 'Clear' : 'Blocked'}</strong>
+          </div>
+        </div>
+      </section>
 
-      <div className="card-grid two-up">
-        <MetricCard label="Active agents" value={String(snapshot.agents.filter((agent) => agent.status !== 'idle').length)} tone="ok" detail="Core team visibility" />
-        <MetricCard label="Bugs" value={String(snapshot.bugs.length)} tone={snapshot.bugs.some((bug) => bug.severity === 'critical') ? 'critical' : 'warning'} detail="Manager-triaged queue" />
-        <MetricCard label="Runs" value={String(snapshot.runs.length)} tone="neutral" detail="Immutable history" />
-        <MetricCard label="Preflight" value={status?.preflight.ok ? 'Clear' : 'Blocked'} tone={status?.preflight.ok ? 'ok' : 'critical'} detail="Codex version and login gate" />
-      </div>
-
-      <article className="info-card">
-        <h4>Live execution picture</h4>
+      <section className="section-block">
+        <div className="section-heading">
+          <h4>Recent coordination</h4>
+        </div>
         <div className="timeline">
           {snapshot.messages.slice(0, 6).map((message) => (
             <div key={message.id} className="timeline-item">
@@ -709,7 +663,7 @@ function DashboardView({
             </div>
           ))}
         </div>
-      </article>
+      </section>
     </section>
   )
 }
@@ -733,13 +687,10 @@ function AgentsView({
 
   return (
     <section className="stack">
-      <article className="info-card">
-        <p className="eyebrow">Agent workspace</p>
-        <h4>Pick an agent, inspect its state, then launch or stop it</h4>
-        <p>Use the list below to move between agents. The log panel always shows the currently selected agent.</p>
-      </article>
-
-      <div className="list-card">
+      <section className="section-block">
+        <div className="section-heading">
+          <h3>Core agents</h3>
+        </div>
         {snapshot.agents.map((agent) => (
           <button
             key={agent.id}
@@ -753,9 +704,9 @@ function AgentsView({
             <div className={`status-badge ${agent.status}`}>{agent.status}</div>
           </button>
         ))}
-      </div>
+      </section>
 
-      <div className="button-row">
+      <div className="button-row compact-row">
         {snapshot.agents
           .filter((agent) => agent.id === selectedAgentId)
           .map((agent) => (
@@ -770,13 +721,13 @@ function AgentsView({
           ))}
       </div>
 
-      <article className="terminal-card">
-        <div className="terminal-header">
-          <span>Agent log stream</span>
+      <section className="section-block flush-block">
+        <div className="section-heading">
+          <h4>Agent log stream</h4>
           <small>Latest stdout/stderr</small>
         </div>
-        <pre>{logs}</pre>
-      </article>
+        <pre className="terminal-output">{logs}</pre>
+      </section>
     </section>
   )
 }
@@ -798,13 +749,10 @@ function BugsView({
 
   return (
     <section className="stack">
-      <article className="info-card">
-        <p className="eyebrow">Bug queue</p>
-        <h4>Testing files bugs here before they move into fixes</h4>
-        <p>Open a bug to see its details, severity, owner, and progress through the lifecycle.</p>
-      </article>
-
-      <div className="list-card">
+      <section className="section-block">
+        <div className="section-heading">
+          <h3>Bug queue</h3>
+        </div>
         {snapshot.bugs.map((bug) => (
           <button
             key={bug.id}
@@ -818,14 +766,17 @@ function BugsView({
             <div className={`status-badge ${bug.severity}`}>{bug.severity}</div>
           </button>
         ))}
-      </div>
+      </section>
 
       {snapshot.bugs
         .filter((bug) => bug.id === selectedBugId || (!selectedBugId && snapshot.bugs[0]?.id === bug.id))
         .map((bug) => (
-          <article className="info-card" key={bug.id}>
-            <h4>{bug.title}</h4>
-            <p>{bug.details}</p>
+          <section className="section-block" key={bug.id}>
+            <div className="section-heading">
+              <h4>{bug.title}</h4>
+              <div className={`status-badge ${bug.status}`}>{bug.status}</div>
+            </div>
+            <p className="section-copy">{bug.details}</p>
             <div className="meta-grid">
               <span>Status: {bug.status}</span>
               <span>Discovered by: {bug.discoveredBy}</span>
@@ -835,7 +786,7 @@ function BugsView({
             <button className="primary" onClick={() => void onAdvance(bug)} disabled={bug.status === 'fixed'}>
               Advance Status
             </button>
-          </article>
+          </section>
         ))}
     </section>
   )
@@ -848,29 +799,23 @@ function ResearchView({ snapshot }: { snapshot: ProjectSnapshot | null }) {
 
   return (
     <section className="stack">
-      <article className="info-card">
-        <p className="eyebrow">Research board</p>
-        <h4>References, captures, and product patterns</h4>
-        <p>Research is stored as notes and evidence only. External code is not copied into the repo.</p>
-      </article>
-
-      <section className="card-grid">
-        {snapshot.research.map((source) => (
-          <article key={source.id} className="info-card">
-            <div className="card-head">
-              <span className="eyebrow">{source.kind}</span>
-              <a href={source.url} target="_blank" rel="noreferrer">
-                Open source
-              </a>
+      {snapshot.research.map((source) => (
+        <section key={source.id} className="section-block">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">{source.kind}</p>
+              <h4>{source.title}</h4>
             </div>
-            <h4>{source.title}</h4>
-            <p>{source.notes}</p>
-            <ul className="plain-list">
-              {source.takeaways.map((takeaway) => <li key={takeaway}>{takeaway}</li>)}
-            </ul>
-          </article>
-        ))}
-      </section>
+            <a href={source.url} target="_blank" rel="noreferrer">
+              Open source
+            </a>
+          </div>
+          <p className="section-copy">{source.notes}</p>
+          <ul className="plain-list">
+            {source.takeaways.map((takeaway) => <li key={takeaway}>{takeaway}</li>)}
+          </ul>
+        </section>
+      ))}
     </section>
   )
 }
@@ -892,13 +837,10 @@ function RunsView({
 
   return (
     <section className="stack">
-      <article className="info-card">
-        <p className="eyebrow">Run history</p>
-        <h4>Each run captures the state of the agent team at that moment</h4>
-        <p>Use this view to resume or pause a run and inspect its current blockers.</p>
-      </article>
-
-      <div className="list-card">
+      <section className="section-block">
+        <div className="section-heading">
+          <h3>Runs</h3>
+        </div>
         {snapshot.runs.map((run) => (
           <button
             key={run.id}
@@ -912,14 +854,17 @@ function RunsView({
             <div className={`status-badge ${run.status}`}>{run.status}</div>
           </button>
         ))}
-      </div>
+      </section>
 
       {snapshot.runs
         .filter((run) => run.id === selectedRunId || (!selectedRunId && snapshot.runs[0]?.id === run.id))
         .map((run) => (
-          <article className="info-card" key={run.id}>
-            <h4>{run.title}</h4>
-            <p>{run.summary}</p>
+          <section className="section-block" key={run.id}>
+            <div className="section-heading">
+              <h4>{run.title}</h4>
+              <div className={`status-badge ${run.status}`}>{run.status}</div>
+            </div>
+            <p className="section-copy">{run.summary}</p>
             <div className="meta-grid">
               <span>Started: {formatDate(run.startedAt)}</span>
               <span>Updated: {formatDate(run.updatedAt)}</span>
@@ -936,7 +881,7 @@ function RunsView({
                 </button>
               ) : null}
             </div>
-          </article>
+          </section>
         ))}
     </section>
   )
@@ -959,88 +904,36 @@ function SettingsView({
 
   return (
     <section className="stack">
-      <article className="info-card">
-        <p className="eyebrow">Codex runtime</p>
-        <h4>{snapshot.project.codexRuntime.model} / {snapshot.project.codexRuntime.reasoningEffort}</h4>
+      <section className="section-block">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Codex runtime</p>
+            <h4>{snapshot.project.codexRuntime.model} / {snapshot.project.codexRuntime.reasoningEffort}</h4>
+          </div>
+        </div>
         <ul className="plain-list">
           <li>Sandbox: {snapshot.project.codexRuntime.sandboxMode}</li>
           <li>Approval policy: {snapshot.project.codexRuntime.approvalPolicy}</li>
           <li>Web search: {snapshot.project.codexRuntime.enableSearch ? 'enabled' : 'disabled'}</li>
           <li>Minimum Codex version: {snapshot.project.codexRuntime.minimumVersion}</li>
         </ul>
-      </article>
+      </section>
 
-      <article className="info-card">
-        <p className="eyebrow">Browser smoke check</p>
+      <section className="section-block">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Browser smoke check</p>
+            <h4>Playwright target</h4>
+          </div>
+        </div>
         <div className="inline-field">
           <input value={smokeUrl} onChange={(event) => onSmokeUrlChange(event.target.value)} />
           <button className="primary" onClick={onSmokeRun}>
             Run Playwright
           </button>
         </div>
-      </article>
+      </section>
     </section>
-  )
-}
-
-function OverviewStrip({
-  snapshot,
-  status,
-  activeTab,
-}: {
-  snapshot: ProjectSnapshot | null
-  status: SystemStatus | null
-  activeTab: TabId
-}) {
-  const activeAgents = snapshot?.agents.filter((agent) => agent.status !== 'idle').length ?? 0
-  const openBugs = snapshot?.bugs.filter((bug) => bug.status !== 'fixed').length ?? 0
-  const currentRun = snapshot?.runs[0]
-
-  return (
-    <section className="overview-strip">
-      <article className="overview-card">
-        <span className="eyebrow">Current focus</span>
-        <strong>{getTabTitle(activeTab)}</strong>
-        <p>{getTabSummary(activeTab)}</p>
-      </article>
-      <article className="overview-card">
-        <span className="eyebrow">Project</span>
-        <strong>{snapshot?.project.name ?? 'No project attached'}</strong>
-        <p>{snapshot ? snapshot.project.repoMode : 'Attach a folder to begin'}</p>
-      </article>
-      <article className="overview-card">
-        <span className="eyebrow">Agents</span>
-        <strong>{activeAgents}</strong>
-        <p>{currentRun ? 'currently active in the latest run' : 'waiting for first run'}</p>
-      </article>
-      <article className="overview-card">
-        <span className="eyebrow">Preflight</span>
-        <strong>{status?.preflight.ok ? 'Ready' : 'Blocked'}</strong>
-        <p>{openBugs > 0 ? `${openBugs} open bugs` : 'No open bugs in queue'}</p>
-      </article>
-    </section>
-  )
-}
-
-function WorkflowStep({
-  step,
-  title,
-  body,
-  tone,
-}: {
-  step: string
-  title: string
-  body: string
-  tone: 'ok' | 'warning' | 'neutral'
-}) {
-  return (
-    <article className={`workflow-step ${tone}`}>
-      <span className="workflow-index">{step}</span>
-      <div>
-        <strong>{title}</strong>
-        <p>{body}</p>
-      </div>
-    </article>
   )
 }
 
@@ -1063,14 +956,14 @@ function InspectorView({
 }) {
   return (
     <div className="stack">
-      <article className="inspector-card emphasis">
-        <p className="eyebrow">What to do here</p>
-        <h4>{getTabTitle(activeTab)}</h4>
-        <p>{getTabSummary(activeTab)}</p>
-      </article>
-
-      <article className="inspector-card">
+      <section className="section-block inspector-block">
         <p className="eyebrow">Inspector</p>
+        {!selectedAgent && !selectedRun && !selectedBug && activeTab !== 'onboarding' && activeTab !== 'dashboard' ? (
+          <>
+            <h4>{getTabTitle(activeTab)}</h4>
+            <p>{getTabSummary(activeTab)}</p>
+          </>
+        ) : null}
         {activeTab === 'agents' && selectedAgent ? (
           <>
             <h4>{selectedAgent.name}</h4>
@@ -1118,46 +1011,25 @@ function InspectorView({
             </ul>
           </>
         ) : null}
-      </article>
+      </section>
 
-      <article className="terminal-card compact">
-        <div className="terminal-header">
-          <span>Recent output</span>
+      <section className="section-block flush-block">
+        <div className="section-heading">
+          <h4>Recent output</h4>
           <small>Inspector tail</small>
         </div>
-        <pre>{logs}</pre>
-      </article>
+        <pre className="terminal-output compact">{logs}</pre>
+      </section>
     </div>
-  )
-}
-
-function MetricCard({
-  label,
-  value,
-  tone,
-  detail,
-}: {
-  label: string
-  value: string
-  tone: 'ok' | 'warning' | 'critical' | 'neutral'
-  detail: string
-}) {
-  return (
-    <article className="metric-card">
-      <span className="eyebrow">{label}</span>
-      <strong>{value}</strong>
-      <div className={`status-dot ${tone}`}></div>
-      <p>{detail}</p>
-    </article>
   )
 }
 
 function EmptyState({ title, body }: { title: string; body: string }) {
   return (
-    <article className="info-card">
+    <section className="section-block">
       <h4>{title}</h4>
       <p>{body}</p>
-    </article>
+    </section>
   )
 }
 

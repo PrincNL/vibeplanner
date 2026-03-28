@@ -11,6 +11,8 @@ const execFileAsync = promisify(execFile)
 interface ExecResult {
   ok: boolean
   stdout: string
+  stderr: string
+  output: string
 }
 
 interface CodexResolution {
@@ -29,12 +31,15 @@ export class CodexService {
           this.safeExec(resolution.command, ['--version'], resolution.env),
           this.safeExec(resolution.command, ['login', 'status'], resolution.env),
         ])
-      : [{ ok: false, stdout: '' }, { ok: false, stdout: '' }]
+      : [
+          { ok: false, stdout: '', stderr: '', output: '' },
+          { ok: false, stdout: '', stderr: '', output: '' },
+        ]
     const preflight = evaluateCodexPreflight(
       {
         codexFound: Boolean(resolution.command),
-        versionOutput: version.stdout,
-        loginStatusOutput: loginStatus.stdout,
+        versionOutput: version.output,
+        loginStatusOutput: loginStatus.output,
       },
       runtime.minimumVersion,
     )
@@ -43,8 +48,8 @@ export class CodexService {
       preflight,
       codexPath: resolution.path,
       codexPathSource: resolution.source,
-      loginStatusOutput: loginStatus.stdout,
-      versionOutput: version.stdout,
+      loginStatusOutput: loginStatus.output,
+      versionOutput: version.output,
       shellPath: resolution.shellPath,
       browserReady: true,
       platform: process.platform,
@@ -58,13 +63,16 @@ export class CodexService {
           this.safeExec(resolution.command, ['--version'], resolution.env),
           this.safeExec(resolution.command, ['login', 'status'], resolution.env),
         ])
-      : [{ ok: false, stdout: '' }, { ok: false, stdout: '' }]
+      : [
+          { ok: false, stdout: '', stderr: '', output: '' },
+          { ok: false, stdout: '', stderr: '', output: '' },
+        ]
 
     return evaluateCodexPreflight(
       {
         codexFound: Boolean(resolution.command),
-        versionOutput: version.stdout,
-        loginStatusOutput: loginStatus.stdout,
+        versionOutput: version.output,
+        loginStatusOutput: loginStatus.output,
       },
       minimumVersion,
     )
@@ -222,14 +230,22 @@ export class CodexService {
   private async safeExec(command: string, args: string[], env: NodeJS.ProcessEnv): Promise<ExecResult> {
     try {
       const result = await execFileAsync(command, args, { timeout: 15000, env })
+      const stdout = result.stdout.toString()
+      const stderr = result.stderr.toString()
       return {
         ok: true,
-        stdout: result.stdout.toString(),
+        stdout,
+        stderr,
+        output: [stdout, stderr].filter(Boolean).join('\n').trim(),
       }
     } catch (error) {
+      const stdout = error instanceof Error && 'stdout' in error ? String(error.stdout ?? '') : ''
+      const stderr = error instanceof Error && 'stderr' in error ? String(error.stderr ?? '') : ''
       return {
         ok: false,
-        stdout: error instanceof Error && 'stdout' in error ? String(error.stdout ?? '') : '',
+        stdout,
+        stderr,
+        output: [stdout, stderr].filter(Boolean).join('\n').trim(),
       }
     }
   }

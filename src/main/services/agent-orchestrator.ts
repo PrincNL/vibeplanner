@@ -60,10 +60,14 @@ export class AgentOrchestrator {
       input.objectiveOverride,
       input.runId ?? null,
     )
-    const args = this.codexService.buildExecArgs(snapshot.project.rootPath, snapshot.project.codexRuntime, prompt)
-    const child = spawn('codex', args, {
+    const launchSpec = await this.codexService.getLaunchSpec(
+      snapshot.project.rootPath,
+      snapshot.project.codexRuntime,
+      prompt,
+    )
+    const child = spawn(launchSpec.command, launchSpec.args, {
       cwd: snapshot.project.rootPath,
-      env: process.env,
+      env: launchSpec.env,
       stdio: 'pipe',
     })
 
